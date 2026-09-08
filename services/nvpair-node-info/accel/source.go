@@ -40,6 +40,11 @@ type Device struct {
 	// UsesSystemMemory marks a unified-memory device whose memory usage is
 	// the host's, not a separate pool.
 	UsesSystemMemory bool
+
+	// Load is how busy the device is, when the source can measure it. It is
+	// internal to detection rather than part of the wire format: the wire
+	// carries a utilization percentage, and not every accelerator has one.
+	Load Load
 }
 
 // Load is how busy a device is, as a fraction in [0,1].
