@@ -71,9 +71,11 @@ type statsCollector struct {
 	// goroutine reads or writes it, so no synchronization is needed.
 	prevCPU cpuTimes
 
-	// nvidiaUnavailable latches on the first nvidia-smi failure so we don't
-	// re-spawn (and re-warn about) a missing binary every tick.
-	nvidiaUnavailable atomic.Bool
+	// latch records which per-source tooling has failed, so we don't
+	// re-spawn (and re-warn about) a missing binary every tick. Per source
+	// rather than one flag: nvidia-smi being absent says nothing about any
+	// other accelerator's tooling on the same host.
+	latch sourceLatch
 
 	stop     chan struct{}
 	done     chan struct{}
@@ -151,16 +153,16 @@ func (c *statsCollector) decodeSnapshot() *statsSnapshot {
 }
 
 // decodeGPU queries nvidia-smi and folds the per-GPU results into out, keyed
-// by UUID. On the first failure it latches nvidiaUnavailable so subsequent
-// ticks short-circuit silently. Unified-memory usage remains available through
+// by UUID. On the first failure it latches the nvidia-smi source so subsequent
+// ticks short-circuit silently, leaving other sources unaffected. Unified-memory usage remains available through
 // the independent /proc/meminfo sample assembled by buildResponse.
 func (c *statsCollector) decodeGPU(out map[string]gpuStat) bool {
-	if c.nvidiaUnavailable.Load() {
+	if c.latch.latched(sourceNvidiaSmi) {
 		return false
 	}
 	csv, err := nvidiaSmiCSV("uuid,utilization.gpu,memory.used")
 	if err != nil {
-		if c.nvidiaUnavailable.CompareAndSwap(false, true) {
+		if c.latch.latch(sourceNvidiaSmi) {
 			slog.Warn("nvidia-smi unavailable; GPU utilization / dedicated VRAM-used will not be reported",
 				"err", err)
 		}
