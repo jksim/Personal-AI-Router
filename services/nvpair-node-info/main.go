@@ -33,6 +33,21 @@ type GPUInfo struct {
 	VramUsedBytes      uint64 `json:"vram_used_bytes,omitempty"`
 	UtilizationPercent uint32 `json:"utilization_percent,omitempty"`
 
+	// Vendor, Kind and DeviceID describe an accelerator well enough that a
+	// consumer does not have to guess from its name.
+	//
+	// Vendor is a lowercase token such as "nvidia" or "qualcomm". Kind is
+	// "gpu", "accelerator", or "display" for an adapter found only by
+	// display-adapter enumeration and therefore not known to run inference.
+	// DeviceID is stable across restarts and identifies the device for
+	// per-device state; it is opaque and its form differs per vendor.
+	//
+	// All three are omitempty: an older peer omits them, and a consumer must
+	// read their absence as unknown rather than as a claim.
+	Vendor   string `json:"vendor,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	DeviceID string `json:"device_id,omitempty"`
+
 	// statsKey is the opaque per-adapter identifier used to join this
 	// static GPUInfo against statsCollector.Snapshot() results. Its
 	// form is platform-specific: on Windows it's the PDH instance-name
