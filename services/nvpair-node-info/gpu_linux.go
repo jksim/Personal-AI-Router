@@ -8,12 +8,15 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jaypipes/ghw"
+
+	"nvpair-node-info/accel"
 )
 
 // nvidiaSmiTimeout caps how long we wait for a single nvidia-smi invocation.
@@ -22,33 +25,92 @@ import (
 // collector from blocking indefinitely.
 const nvidiaSmiTimeout = 3 * time.Second
 
-// detectGPUs enumerates GPUs on Linux. It prefers nvidia-smi, which yields the
+// detectGPUs enumerates accelerators on Linux by running the source chain and
+// mapping what it finds onto the wire type. NVIDIA's source yields the
 // marketing name, total VRAM, and a stable per-GPU UUID we reuse as the join
-// key (statsKey) against the dynamic stats collector's snapshot. When
-// nvidia-smi is absent — no NVIDIA driver, or an AMD/Intel-only host — it falls
+// key (statsKey) against the dynamic stats collector's snapshot. When no source
+// reports anything — no NVIDIA driver, or an AMD/Intel-only host — it falls
 // back to ghw, which reports adapter names but no VRAM and no join key, so
 // those hosts list their GPUs without dynamic VRAM/utilization (matching the
 // pre-existing non-Windows behavior).
+//
+// ghw enumerates display adapters, so it is a fallback for graphics cards
+// rather than a way to find a compute accelerator; a source that owns the
+// hardware belongs in the chain instead.
 //
 // On unified-memory architectures (UMA, e.g. Grace-Blackwell / DGX Spark)
 // nvidia-smi reports [N/A] for memory.total because the GPU shares system
 // DRAM; in that case VramBytes is filled from detectMemoryTotal() instead.
 func detectGPUs() []GPUInfo {
-	if out, err := nvidiaSmiCSV("uuid,name,memory.total"); err == nil {
-		if gpus, uma := parseNvidiaStatic(out); len(gpus) > 0 {
-			if uma {
-				if total := detectMemoryTotal(); total > 0 {
-					for i := range gpus {
-						if gpus[i].usesSystemMemoryUsage {
-							gpus[i].VramBytes = total
-						}
-					}
+	devices, errs := accel.Detect(context.Background(), linuxAccelSources())
+	for _, err := range errs {
+		// Debug, not warn: on a host with no NVIDIA driver this is the
+		// ordinary case, and the stats collector already warns once about
+		// the same missing binary. Two warnings for one absent tool is noise.
+		slog.Debug("accelerator detection source failed", "err", err)
+	}
+	if len(devices) == 0 {
+		return detectGPUsGHW()
+	}
+
+	gpus := make([]GPUInfo, 0, len(devices))
+	for _, device := range devices {
+		gpus = append(gpus, GPUInfo{
+			Name:                  device.Name,
+			VramBytes:             device.VramBytes,
+			statsKey:              device.StatsKey,
+			usesSystemMemoryUsage: device.UsesSystemMemory,
+		})
+	}
+	return gpus
+}
+
+// linuxAccelSources is the detection chain, in reporting order. Qualcomm and
+// any other accelerator source join this slice; nothing else has to change.
+func linuxAccelSources() []accel.Source {
+	return []accel.Source{nvidiaSource{}}
+}
+
+// nvidiaSource detects NVIDIA GPUs through nvidia-smi.
+type nvidiaSource struct{}
+
+func (nvidiaSource) Name() string { return sourceNvidiaSmi }
+
+// Detect returns the NVIDIA GPUs nvidia-smi reports. A host with no NVIDIA
+// driver yields no devices and no error — absent hardware is not a fault.
+// Parsing yielding no rows is treated the same way, so the caller still falls
+// back to ghw exactly as it did before the chain existed.
+func (nvidiaSource) Detect(ctx context.Context) ([]accel.Device, error) {
+	out, err := nvidiaSmiCSVContext(ctx, "uuid,name,memory.total")
+	if err != nil {
+		return nil, err
+	}
+	gpus, uma := parseNvidiaStatic(out)
+	if len(gpus) == 0 {
+		return nil, nil
+	}
+	// On unified-memory parts nvidia-smi reports [N/A] for memory.total
+	// because the GPU shares system DRAM; fill it from the host's total.
+	if uma {
+		if total := detectMemoryTotal(); total > 0 {
+			for i := range gpus {
+				if gpus[i].usesSystemMemoryUsage {
+					gpus[i].VramBytes = total
 				}
 			}
-			return gpus
 		}
 	}
-	return detectGPUsGHW()
+
+	devices := make([]accel.Device, 0, len(gpus))
+	for _, gpu := range gpus {
+		devices = append(devices, accel.Device{
+			Name:             gpu.Name,
+			VramBytes:        gpu.VramBytes,
+			StatsKey:         gpu.statsKey,
+			UsesSystemMemory: gpu.usesSystemMemoryUsage,
+		})
+	}
+	return devices, nil
 }
 
 // detectGPUsGHW is the ghw-based fallback, identical in spirit to the
