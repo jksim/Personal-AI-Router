@@ -42,6 +42,19 @@ type Device struct {
 	UsesSystemMemory bool
 }
 
+// Load is how busy a device is, as a fraction in [0,1].
+//
+// Valid is separate from Fraction on purpose. Sources differ in what they can
+// measure, and one of them — Qualcomm's — returns zero from a failed sensor
+// read while still reporting success, so a bare float cannot distinguish "idle"
+// from "no reading". The scheduler treats those very differently: an idle node
+// attracts work and an unmeasured one is held at neutral pressure. Anything
+// that cannot be measured must say so rather than defaulting to zero.
+type Load struct {
+	Fraction float64
+	Valid    bool
+}
+
 // Source detects one class of accelerator. Implementations report only the
 // devices they own, so a host with several kinds of hardware yields all of
 // them.
