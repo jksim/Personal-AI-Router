@@ -763,3 +763,55 @@ func TestTelemetryLoopBoundsConcurrentWorkAcrossTicks(t *testing.T) {
 		t.Fatalf("maximum concurrent telemetry work = %d, want %d", got, telemetryRefreshConcurrency)
 	}
 }
+
+// TestRefreshNodeTelemetryRollupIsVendorBlind pins that the max across a node's
+// accelerators reads utilization only, never names.
+//
+// The rollup is already vendor-neutral, but nothing said so, and it sits
+// directly under work that adds non-NVIDIA accelerators. The case that matters
+// is a mixed host: if the busiest device were ever skipped because its name
+// went unrecognised, the node would advertise itself as idle and attract work
+// it cannot take.
+func TestRefreshNodeTelemetryRollupIsVendorBlind(t *testing.T) {
+	response := NodeInfoResponse{
+		GPUs: []GPUInfo{
+			{Name: "NVIDIA RTX A4500", UtilizationPercent: 12},
+			{Name: "Qualcomm Cloud AI 100 Ultra", UtilizationPercent: 91},
+			{Name: "", UtilizationPercent: 40},
+		},
+		TelemetryValid: true,
+		HostUUID:       "mixed-node",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	port, err := strconv.Atoi(serverURL.Port())
+	if err != nil {
+		t.Fatalf("parse server port: %v", err)
+	}
+
+	var output bytes.Buffer
+	d := &daemon{codec: NewCodec(&output), http: server.Client()}
+	if !d.refreshNodeTelemetry(context.Background(), "mixed-node", serverURL.Hostname(), port) {
+		t.Fatal("valid node-info response did not emit telemetry")
+	}
+
+	var message Message
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &message); err != nil {
+		t.Fatalf("decode notification: %v", err)
+	}
+	var got noderec.NodeTelemetry
+	if err := json.Unmarshal(message.Params, &got); err != nil {
+		t.Fatalf("decode telemetry: %v", err)
+	}
+	// 91 is the non-NVIDIA device. An implementation that preferred NVIDIA,
+	// or that skipped an unnamed adapter, would report 12 or 40 instead.
+	if got.GPUUtilizationPct != 91 {
+		t.Fatalf("GPU utilization = %d, want max 91 regardless of vendor", got.GPUUtilizationPct)
+	}
+}
