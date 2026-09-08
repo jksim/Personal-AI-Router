@@ -203,6 +203,15 @@ interface ModularGpu {
     vramBytes: number
     vramUsedBytes: number
     utilizationPercent: number
+    /** Lowercase vendor token, empty when the node does not report one. */
+    vendor: string
+    /** 'gpu' | 'accelerator' | 'display', empty when unknown. */
+    kind: string
+    /**
+     * Stable per-device identity from the node. Empty on older peers, which is
+     * why every consumer still needs a positional fallback.
+     */
+    deviceId: string
 }
 
 interface ModularCpu {
@@ -494,10 +503,15 @@ function removeSource(sources: BrokerNodeSource[], source: BrokerNodeSource): Br
     return sources.filter(entry => entry !== source)
 }
 
-function nvidiaGpuRank(gpu: ModularGpu): number {
-    return gpu.name.toLowerCase().includes('nvidia') ? 0 : 1
-}
-
+/**
+ * Reads the node's GPU array, preserving the order the node reported.
+ *
+ * This used to hoist any device whose name contained 'nvidia' to the front,
+ * which ranked a Qualcomm accelerator below an integrated display adapter. It
+ * also silently broke identity: gpu ids are assigned from array position after
+ * this function returns, and metrics history is keyed by those ids, so
+ * reordering grafted one device's accumulated history onto another.
+ */
 function gpuArrayValue(value: JsonValue | undefined): ModularGpu[] {
     if (!Array.isArray(value)) return []
     const gpus: ModularGpu[] = []
@@ -508,10 +522,25 @@ function gpuArrayValue(value: JsonValue | undefined): ModularGpu[] {
             name: stringValue(obj.name),
             vramBytes: numberValue(obj.vram_bytes),
             vramUsedBytes: numberValue(obj.vram_used_bytes),
-            utilizationPercent: numberValue(obj.utilization_percent)
+            utilizationPercent: numberValue(obj.utilization_percent),
+            vendor: stringValue(obj.vendor),
+            kind: stringValue(obj.kind),
+            deviceId: stringValue(obj.device_id)
         })
     }
-    return gpus.sort((left, right) => nvidiaGpuRank(left) - nvidiaGpuRank(right))
+    return gpus
+}
+
+/**
+ * Stable identity for one device on one node.
+ *
+ * Prefers the id the node reports, so it survives the device set changing.
+ * Older peers report none, and those fall back to array position — the
+ * behaviour everything had before, with the same caveat that it moves if the
+ * device set does.
+ */
+function gpuId(nodeId: string, gpu: ModularGpu, index: number): string {
+    return gpu.deviceId === '' ? `${nodeId}:gpu:${index}` : `${nodeId}:gpu:${gpu.deviceId}`
 }
 
 function cpuValue(value: JsonValue | undefined): ModularCpu | null {
@@ -637,7 +666,7 @@ function toNodeItem(node: ModularNode, selfId: string | null): NodeItem {
                 threads: node.cpu?.cores ?? 0
             },
             gpus: node.gpus.map((gpu, index) => ({
-                id: `${node.id}:gpu:${index}`,
+                id: gpuId(node.id, gpu, index),
                 name: gpu.name,
                 vramTotal: gpu.vramBytes
             })),
@@ -663,11 +692,11 @@ function toMetrics(node: ModularNode): NodeItemMetrics {
         cpuUtilization: node.cpu?.utilizationPercent ?? 0,
         memoryUsage,
         gpuUtilization: node.gpus.map((gpu, index) => ({
-            id: `${node.id}:gpu:${index}`,
+            id: gpuId(node.id, gpu, index),
             value: gpu.utilizationPercent
         })),
         gpuVramUsage: node.gpus.map((gpu, index) => ({
-            id: `${node.id}:gpu:${index}`,
+            id: gpuId(node.id, gpu, index),
             value: gpu.vramBytes > 0 ? (gpu.vramUsedBytes / gpu.vramBytes) * 100 : 0
         }))
     }

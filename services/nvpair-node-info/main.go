@@ -25,6 +25,8 @@ import (
 	"nvpair-shared/nodeid"
 	"nvpair-shared/noderec"
 	"nvpair-shared/splitlisten"
+
+	"nvpair-node-info/accel"
 )
 
 type GPUInfo struct {
@@ -87,11 +89,21 @@ type MemoryInfo struct {
 }
 
 type NodeInfoResponse struct {
-	GPUs           []GPUInfo   `json:"GPUs"`
-	CPU            *CPUInfo    `json:"cpu,omitempty"`
-	Memory         *MemoryInfo `json:"memory,omitempty"`
-	TelemetryValid bool        `json:"telemetryValid"`
-	MSSince        int64       `json:"msSince"`
+	GPUs []GPUInfo `json:"GPUs"`
+	// InferenceHardwareIDs lists the device_id of every accelerator this
+	// node believes can run inference, so a consumer does not have to
+	// classify hardware itself from a device name.
+	//
+	// A device is excluded when nothing establishes it as a compute device:
+	// an adapter found only by display-adapter enumeration is a graphics
+	// card as far as we know and nothing more. Absent or empty means
+	// unknown, and a consumer must fall open and show everything rather
+	// than hiding hardware it cannot classify.
+	InferenceHardwareIDs []string    `json:"inference_hardware_ids,omitempty"`
+	CPU                  *CPUInfo    `json:"cpu,omitempty"`
+	Memory               *MemoryInfo `json:"memory,omitempty"`
+	TelemetryValid       bool        `json:"telemetryValid"`
+	MSSince              int64       `json:"msSince"`
 	// HostUUID is this node's stable per-host identity (the same value the
 	// node-scanner advertises as uuid= and the cluster uses as nodeUuid). It lets
 	// a consumer that reaches this node only over HTTP — notably a user-added
@@ -205,11 +217,12 @@ func buildResponseAt(gpus []GPUInfo, cpuStatic *CPUInfo, memTotal uint64, snap s
 
 	telemetryValid, msSince := telemetryStatus(snap.GPUSampledAt, now)
 	resp := NodeInfoResponse{
-		GPUs:           outGPUs,
-		TelemetryValid: telemetryValid,
-		MSSince:        msSince,
-		HostUUID:       hostUUID,
-		ClusterUUID:    clusterUUID,
+		GPUs:                 outGPUs,
+		InferenceHardwareIDs: inferenceHardwareIDs(outGPUs),
+		TelemetryValid:       telemetryValid,
+		MSSince:              msSince,
+		HostUUID:             hostUUID,
+		ClusterUUID:          clusterUUID,
 	}
 	if cpuStatic != nil {
 		cpu := *cpuStatic
@@ -235,6 +248,24 @@ func telemetryStatus(sampledAt, now time.Time) (bool, int64) {
 		age = 0
 	}
 	return true, age.Milliseconds()
+}
+
+// inferenceHardwareIDs selects the devices that can run inference.
+//
+// A device needs a stable id to be referenced at all, and must not be a
+// display adapter discovered by graphics enumeration — that path reports
+// adapters without establishing anything about their compute capability. On a
+// host where nothing qualifies the list is empty and therefore omitted, which
+// consumers read as "unknown" and fall open on.
+func inferenceHardwareIDs(gpus []GPUInfo) []string {
+	var ids []string
+	for _, gpu := range gpus {
+		if gpu.DeviceID == "" || gpu.Kind == accel.KindDisplay {
+			continue
+		}
+		ids = append(ids, gpu.DeviceID)
+	}
+	return ids
 }
 
 func mergeGPUInventory(static, recovered []GPUInfo) []GPUInfo {
