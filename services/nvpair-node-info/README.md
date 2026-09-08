@@ -104,3 +104,52 @@ The service shuts down on:
 - `SIGINT` / `SIGTERM`
 
 On shutdown it gracefully stops the HTTP/HTTPS listeners (3 s timeout).
+
+## Accelerator detection
+
+Linux detection runs a chain of sources rather than a single vendor query, so a
+host with more than one kind of accelerator reports all of them and one vendor's
+tooling being absent never hides another's hardware.
+
+| Source | Finds | Needs |
+| ------ | ----- | ----- |
+| `nvidia-smi` | NVIDIA GPUs, with VRAM and a stable UUID | `nvidia-smi` on `PATH` |
+| `qaic` | Qualcomm Cloud AI accelerators | sysfs only to enumerate; a readable device node to report memory and occupancy |
+| ghw | Display adapters, names only | nothing |
+
+Devices are reported with `vendor`, `kind` and a stable `device_id`, and the
+response carries `inference_hardware_ids` listing the devices believed able to
+run inference. A device found only by ghw is reported as `kind: "display"` and
+excluded from that list, because display-adapter enumeration establishes nothing
+about compute capability.
+
+### Qualcomm accelerators
+
+Enumeration needs nothing privileged. Reading a card's memory and occupancy
+means opening its `/dev/accel/*` node, which is `root:root` mode `0600` by
+default, so an unprivileged service sees the hardware but no telemetry. The card
+is still reported — a card visible in `lspci` should not vanish from the UI
+because of a permissions problem — but without a board serial its SoCs cannot be
+grouped, so a multi-SoC card appears as several devices and contributes no
+occupancy reading.
+
+To grant access, install a udev rule such as:
+
+```
+# /etc/udev/rules.d/70-qaic.rules
+KERNEL=="accel*", SUBSYSTEM=="accel", GROUP="video", MODE="0660"
+```
+
+then `sudo udevadm control --reload-rules && sudo udevadm trigger`, and add the
+account running the service to that group. PAIR never installs this itself.
+
+A Cloud AI 100 Ultra presents four PCI functions and is reported as one card
+with its resources summed. Grouping is by board serial only: SoCs of one card do
+share an upstream PCIe switch, but so do two separate cards in adjacent slots,
+and merging those would report one card with double the capacity.
+
+Occupancy comes from NSP counts — each NSP runs one workload at a time — because
+the Qualcomm stack exposes no utilization percentage anywhere. Temperature and
+power are read from hwmon when present, which in practice means only when the
+out-of-tree Qualcomm kernel module is installed; the in-tree driver creates no
+hwmon nodes. An unavailable sensor is reported as unavailable, never as zero.
