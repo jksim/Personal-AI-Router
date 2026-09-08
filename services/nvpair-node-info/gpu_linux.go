@@ -76,11 +76,39 @@ func detectGPUsGHW() []GPUInfo {
 // binary (not on PATH) surfaces as an exec error, which callers treat as "no
 // NVIDIA GPU data available" and degrade silently.
 func nvidiaSmiCSV(fields string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), nvidiaSmiTimeout)
+	return nvidiaSmiCSVContext(context.Background(), fields)
+}
+
+// nvidiaSmiCSVContext is nvidiaSmiCSV under a caller-supplied parent context,
+// so a shutting-down process can abort a query rather than wait out
+// nvidiaSmiTimeout.
+func nvidiaSmiCSVContext(parent context.Context, fields string) (string, error) {
+	return nvidiaSmiCSVWithRunner(parent, nvidiaSmiTimeout, runNvidiaSmi, fields)
+}
+
+// runNvidiaSmi is the only place this file touches the process table. It is
+// split out so nvidiaSmiCSVWithRunner stays testable: the exec boundary was
+// previously unreachable from a test, which left the timeout, the degrade path,
+// and the ghw fallback trigger unverified on Linux.
+func runNvidiaSmi(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "nvidia-smi", args...).Output()
+}
+
+// nvidiaSmiCSVWithRunner builds the query argv, bounds it with timeout, and
+// hands it to run. Stdout is returned verbatim — including on error, because a
+// partial read is still worth parsing — and the error is returned unwrapped,
+// because decodeGPU logs it as-is.
+func nvidiaSmiCSVWithRunner(
+	parent context.Context,
+	timeout time.Duration,
+	run func(context.Context, ...string) ([]byte, error),
+	fields string,
+) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "nvidia-smi",
+	out, err := run(ctx,
 		"--query-gpu="+fields,
-		"--format=csv,noheader,nounits").Output()
+		"--format=csv,noheader,nounits")
 	return string(out), err
 }
 
