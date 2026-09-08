@@ -237,3 +237,79 @@ func TestTelemetryNotificationEmitsOnlyOnPressureChange(t *testing.T) {
 		}
 	}
 }
+
+// TestTelemetryValidityFlapEmitsOnEveryTransition characterises what a node
+// with unreliable telemetry costs the cluster, so the number is on record
+// rather than discovered in production.
+//
+// Effective pressure is the band while a sample is fresh and valid, and
+// unknownGPUPressure otherwise, so every flip of TelemetryValid moves it and
+// every move returns true — which makes the manager recompute and emit a
+// schedule:priority to every engine. An idle node that flaps therefore emits on
+// each sample, and the scanner samples every two seconds.
+//
+// This is deliberately not smoothed. The ranking genuinely did change, and
+// suppressing the emission would leave the scheduler routing on a belief it no
+// longer holds. Flapping is a defect at the source, not something the scheduler
+// should paper over: a source either has a reading or it does not, and node-info
+// latches a source that fails rather than retrying it into an oscillation.
+func TestTelemetryValidityFlapEmitsOnEveryTransition(t *testing.T) {
+	manager := NewManager(NewCodec(nopRW{}), time.Second)
+	now := time.Unix(1_700_000_000, 0)
+
+	const samples = 10
+	transitions := 0
+	for i := 0; i < samples; i++ {
+		sample := noderec.NodeTelemetry{
+			HostUUID:          "node-a",
+			GPUUtilizationPct: 0,
+			TelemetryValid:    i%2 == 0,
+		}
+		// One second apart, well inside gpuTelemetryFreshness, so only
+		// validity moves the pressure — never staleness.
+		if manager.applyTelemetryAt(sample, now.Add(time.Duration(i)*time.Second)) {
+			transitions++
+		}
+	}
+
+	if transitions != samples {
+		t.Fatalf("%d of %d flapping samples changed effective pressure, want all of them",
+			transitions, samples)
+	}
+
+	// And the band itself is honest at both ends of the flap.
+	if got := manager.gpuPressureAt("node-a", now.Add((samples-1)*time.Second)); got != unknownGPUPressure {
+		t.Fatalf("pressure after an invalid sample = %d, want unknown %d", got, unknownGPUPressure)
+	}
+}
+
+// TestIdleValidTelemetryOutranksUnknown is the routing consequence of a
+// non-NVIDIA node finally being able to report valid telemetry, stated in terms
+// of scheduling rather than of a single band.
+//
+// Nothing on this path inspects vendor: the scanner rolls up a max across the
+// GPU array without reading names, and pressureBand takes a bare float. So the
+// only thing standing between a Qualcomm node and fair scheduling is whether
+// node-info sets TelemetryValid — which is why this module changes node-info
+// and leaves the scheduler alone.
+func TestIdleValidTelemetryOutranksUnknown(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	m := mgrWith(nopRW{}, []string{"reports", "silent"})
+
+	m.applyTelemetryAt(noderec.NodeTelemetry{
+		HostUUID:          "reports",
+		GPUUtilizationPct: 0,
+		TelemetryValid:    true,
+	}, now)
+
+	order, ranks := m.rankAt(now)
+	if order[0] != "reports" {
+		t.Fatalf("order = %v, want the idle reporting node first", order)
+	}
+	if got := pressureOf(ranks, "reports"); got != 0 {
+		t.Fatalf("idle reporting node pressure = %d, want 0", got)
+	}
+	if got := pressureOf(ranks, "silent"); got != unknownGPUPressure {
+		t.Fatalf("silent node pressure = %d, want unknown %d", got, unknownGPUPressure)
+	}
+}
