@@ -29,7 +29,14 @@ import { fileURLToPath } from 'node:url'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+// Upstream files keep NVIDIA's notice. Apache-2.0 requires preserving the
+// notices already on a work, and rewriting them would misattribute authorship;
+// files first written in this fork carry the fork's own copyright instead, for
+// the same reason in the other direction. Both are accepted, and --fix inserts
+// the fork holder because anything newly created here was authored here.
 const COPYRIGHT_HOLDER = 'NVIDIA CORPORATION & AFFILIATES. All rights reserved.'
+const FORK_COPYRIGHT_HOLDER = 'Jarrett Simerson'
+const ACCEPTED_COPYRIGHT_HOLDERS = new Set([COPYRIGHT_HOLDER, FORK_COPYRIGHT_HOLDER])
 const LICENSE_IDENTIFIER = 'Apache-2.0'
 
 // A header may sit below a shebang, an XML prologue, or YAML frontmatter, so the
@@ -38,7 +45,7 @@ const HEADER_SCAN_LINES = 24
 
 function headerLines(year) {
     return [
-        `SPDX-FileCopyrightText: Copyright (c) ${year} ${COPYRIGHT_HOLDER}`,
+        `SPDX-FileCopyrightText: Copyright (c) ${year} ${FORK_COPYRIGHT_HOLDER}`,
         `SPDX-License-Identifier: ${LICENSE_IDENTIFIER}`,
     ]
 }
@@ -201,7 +208,7 @@ function inspect(text) {
     // Strip a block-comment terminator the tag regex swept up on a one-line header.
     const notice = copyright[1].replace(/\s*(-->|\*\/)\s*$/, '').trim()
     const parsed = notice.match(COPYRIGHT_TEXT)
-    if (parsed === null || parsed[1] !== COPYRIGHT_HOLDER) {
+    if (parsed === null || !ACCEPTED_COPYRIGHT_HOLDERS.has(parsed[1])) {
         return { state: 'review', detail: `nonstandard copyright line: ${notice}` }
     }
     return { state: 'ok' }
@@ -259,7 +266,7 @@ function candidates(staged, prefixes) {
 
 const USAGE = `Usage: node scripts/spdx-headers.mjs [options] [path...]
 
-Verify that every file carries the NVIDIA SPDX copyright and license header.
+Verify that every file carries a recognised SPDX copyright and license header.
 
 Options:
   --fix            Insert the header into files that have none.
@@ -357,7 +364,7 @@ function main() {
     report('Inserted', fixed)
     report('Missing the header', missing.map(entry => entry.path))
     report('Could not be written', unwritable)
-    report('Needs a human — present but not the canonical NVIDIA Apache-2.0 header', review)
+    report('Needs a human — present but not a recognised Apache-2.0 header', review)
     report('Unclassified — add to STYLE_BY_EXTENSION or SKIPPED_EXTENSIONS', unclassified)
     if (options.showSkipped) report('Skipped', skipped)
 

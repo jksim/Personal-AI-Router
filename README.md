@@ -8,6 +8,28 @@ SPDX-License-Identifier: Apache-2.0
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Security Policy](https://img.shields.io/badge/security-policy-green.svg)](SECURITY.md)
 
+> ### This is an unofficial fork
+>
+> This repository is a personal fork of
+> [NVIDIA/Personal-AI-Router](https://github.com/NVIDIA/Personal-AI-Router).
+> It is **not affiliated with, endorsed by, or supported by NVIDIA Corporation.**
+> NVIDIA, the NVIDIA logo, and NVIDIA product names are trademarks of NVIDIA
+> Corporation; they are used here only to identify the upstream project this work
+> derives from, and no trademark rights are claimed or granted (Apache-2.0 §6).
+>
+> **Do not report issues with this fork to NVIDIA.** Use this repository's issue
+> tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
+>
+> **What this fork adds.** Support for additional inference engines —
+> [Modular MAX](https://www.modular.com/) and Qualcomm Cloud AI 100 via
+> [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic) — and a vendor-neutral
+> accelerator layer so non-NVIDIA hardware is detected, described and scheduled
+> honestly. This work is in progress; see the commit history for what has
+> actually landed.
+>
+> Upstream code remains under its original copyright and the Apache-2.0 licence.
+> Files first written in this fork carry the fork author's copyright.
+
 NVIDIA Personal AI Router (PAIR) is a local inference router for a group of
 compatible computers on the same network. It discovers participating nodes,
 manages supported inference engines, and presents Ollama-compatible and
