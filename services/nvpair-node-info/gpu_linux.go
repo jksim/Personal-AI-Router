@@ -56,8 +56,14 @@ func detectGPUs() []GPUInfo {
 	gpus := make([]GPUInfo, 0, len(devices))
 	for _, device := range devices {
 		gpus = append(gpus, GPUInfo{
-			Name:                  device.Name,
-			VramBytes:             device.VramBytes,
+			Name:      device.Name,
+			VramBytes: device.VramBytes,
+			Vendor:    device.Vendor,
+			Kind:      device.Kind,
+			// DeviceID is the same opaque identity the stats collector
+			// joins on; publishing it lets a consumer key per-device
+			// state without inventing a positional index.
+			DeviceID:              device.StatsKey,
 			statsKey:              device.StatsKey,
 			usesSystemMemoryUsage: device.UsesSystemMemory,
 		})
@@ -108,6 +114,8 @@ func (nvidiaSource) Detect(ctx context.Context) ([]accel.Device, error) {
 			VramBytes:        gpu.VramBytes,
 			StatsKey:         gpu.statsKey,
 			UsesSystemMemory: gpu.usesSystemMemoryUsage,
+			Vendor:           accel.VendorNVIDIA,
+			Kind:             accel.KindGPU,
 		})
 	}
 	return devices, nil
@@ -128,7 +136,10 @@ func detectGPUsGHW() []GPUInfo {
 		if card.DeviceInfo != nil && card.DeviceInfo.Product != nil {
 			name = card.DeviceInfo.Product.Name
 		}
-		gpus = append(gpus, GPUInfo{Name: name})
+		// ghw enumerates display adapters. Nothing here says the device
+		// runs compute, so it is reported as a display adapter rather than
+		// claimed as a GPU that could take inference work.
+		gpus = append(gpus, GPUInfo{Name: name, Kind: accel.KindDisplay})
 	}
 	return gpus
 }

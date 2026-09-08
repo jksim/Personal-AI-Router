@@ -41,11 +41,39 @@ type Device struct {
 	// the host's, not a separate pool.
 	UsesSystemMemory bool
 
+	// Vendor is a lowercase token identifying who made the device.
+	Vendor string
+
+	// Kind separates a compute accelerator from a display adapter. Only the
+	// former is known to run inference, and the distinction cannot be made
+	// from a device name.
+	Kind string
+
 	// Load is how busy the device is, when the source can measure it. It is
 	// internal to detection rather than part of the wire format: the wire
 	// carries a utilization percentage, and not every accelerator has one.
 	Load Load
 }
+
+// Vendor tokens.
+const (
+	VendorNVIDIA   = "nvidia"
+	VendorQualcomm = "qualcomm"
+)
+
+// Device kinds.
+const (
+	// KindGPU is a graphics processor that also runs compute.
+	KindGPU = "gpu"
+
+	// KindAccelerator is a compute-only device with no display output.
+	KindAccelerator = "accelerator"
+
+	// KindDisplay is an adapter found only by display-adapter enumeration.
+	// Nothing is known about its compute capability, so it must not be
+	// advertised as inference-ready.
+	KindDisplay = "display"
+)
 
 // Load is how busy a device is, as a fraction in [0,1].
 //
@@ -73,6 +101,29 @@ type Source interface {
 	// being present is the ordinary case and must return no devices and no
 	// error; an error means the source itself malfunctioned.
 	Detect(ctx context.Context) ([]Device, error)
+}
+
+// DeviceSample is a dynamic reading for one device previously detected.
+type DeviceSample struct {
+	// StatsKey matches the Device the reading belongs to.
+	StatsKey string
+
+	// Load is occupancy, if the source can measure it.
+	Load Load
+
+	// MemoryUsedBytes is device memory in use, zero when unknown.
+	MemoryUsedBytes uint64
+}
+
+// Sampler is implemented by sources that can report changing readings, not
+// just enumerate hardware. It is optional: a source that only enumerates is
+// still useful, it simply contributes no telemetry.
+type Sampler interface {
+	Source
+
+	// Sample reads current values. Hardware that has gone away yields no
+	// samples and no error.
+	Sample(ctx context.Context) ([]DeviceSample, error)
 }
 
 // Detect consults every source in order and returns their devices grouped in

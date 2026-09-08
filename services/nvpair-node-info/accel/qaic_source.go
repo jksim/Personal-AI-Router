@@ -50,6 +50,57 @@ func (s *qaicSource) Name() string { return SourceQAIC }
 // load figures, because a card the operator can see in lspci should not vanish
 // from the UI because of a permissions problem.
 func (s *qaicSource) Detect(context.Context) ([]Device, error) {
+	cards, err := s.cards()
+	if err != nil {
+		return nil, err
+	}
+	devices := make([]Device, 0, len(cards))
+	for _, card := range cards {
+		devices = append(devices, Device{
+			Name:      qaicDeviceName(card),
+			VramBytes: uint64(card.DramTotalMB) * 1024 * 1024,
+			StatsKey:  qaicStatsKey(card),
+			Vendor:    VendorQualcomm,
+			Kind:      KindAccelerator,
+			Load:      card.Load(),
+		})
+	}
+	return devices, nil
+}
+
+// Sample re-reads the cards' current state.
+//
+// It re-enumerates rather than caching what Detect found. Enumeration is a
+// handful of small file reads, and a card that was hot-plugged, or whose device
+// node became readable after a udev rule was added, then appears without
+// needing a restart — which matters because detection otherwise runs only once
+// at boot.
+func (s *qaicSource) Sample(context.Context) ([]DeviceSample, error) {
+	cards, err := s.cards()
+	if err != nil {
+		return nil, err
+	}
+	samples := make([]DeviceSample, 0, len(cards))
+	for _, card := range cards {
+		load := card.Load()
+		if !load.Valid {
+			// Nothing was readable for this card. Publishing a zero
+			// would be indistinguishable from a genuinely idle card.
+			continue
+		}
+		used := uint64(card.DramTotalMB-card.DramFreeMB) * 1024 * 1024
+		samples = append(samples, DeviceSample{
+			StatsKey:        qaicStatsKey(card),
+			Load:            load,
+			MemoryUsedBytes: used,
+		})
+	}
+	return samples, nil
+}
+
+// cards enumerates the SoCs, asks each for its status where possible, and
+// groups them into physical cards.
+func (s *qaicSource) cards() ([]qaicCard, error) {
 	socs, err := enumerateQAIC(s.sysfsRoot)
 	if err != nil {
 		return nil, fmt.Errorf("enumerate qaic devices: %w", err)
@@ -76,18 +127,7 @@ func (s *qaicSource) Detect(context.Context) ([]Device, error) {
 		}
 		entries = append(entries, entry)
 	}
-
-	cards := groupQAICCards(entries)
-	devices := make([]Device, 0, len(cards))
-	for _, card := range cards {
-		devices = append(devices, Device{
-			Name:      qaicDeviceName(card),
-			VramBytes: uint64(card.DramTotalMB) * 1024 * 1024,
-			StatsKey:  qaicStatsKey(card),
-			Load:      card.Load(),
-		})
-	}
-	return devices, nil
+	return groupQAICCards(entries), nil
 }
 
 // qaicDeviceName is what an operator sees. The SKU is the useful part — it

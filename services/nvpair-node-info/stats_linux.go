@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"nvpair-node-info/accel"
 )
 
 // Linux node-stats collection. This collector is the Linux counterpart to
@@ -77,6 +80,11 @@ type statsCollector struct {
 	// other accelerator's tooling on the same host.
 	latch sourceLatch
 
+	// samplers are the accelerator sources that can report changing
+	// readings. Injected so the collector is testable without hardware,
+	// following the pattern the Darwin collector already uses.
+	samplers []accel.Sampler
+
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
@@ -88,9 +96,27 @@ type statsCollector struct {
 // GPU collection remains asynchronous because nvidia-smi may take up to its
 // three-second timeout. Never returns nil.
 func startStatsCollector() *statsCollector {
+	return startStatsCollectorWith(linuxAccelSamplers())
+}
+
+// linuxAccelSamplers picks the detection sources that can also report
+// readings. A source that only enumerates contributes no telemetry, which is
+// fine — NVIDIA's readings come from the stats collector's own nvidia-smi call.
+func linuxAccelSamplers() []accel.Sampler {
+	var samplers []accel.Sampler
+	for _, source := range linuxAccelSources() {
+		if sampler, ok := source.(accel.Sampler); ok {
+			samplers = append(samplers, sampler)
+		}
+	}
+	return samplers
+}
+
+func startStatsCollectorWith(samplers []accel.Sampler) *statsCollector {
 	c := &statsCollector{
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
+		samplers: samplers,
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
 	}
 	c.latest.Store(initialMemorySnapshot(readMemoryUsed))
 	// Prime the CPU baseline so the first tick produces a real delta rather
@@ -144,12 +170,54 @@ func (c *statsCollector) decodeSnapshot() *statsSnapshot {
 	}
 
 	gpu := make(map[string]gpuStat)
+	// A usable sample is one that carries an occupancy reading, from any
+	// source. Previously only nvidia-smi could produce one, which is why a
+	// host with no NVIDIA GPU never had valid telemetry and was pinned at
+	// neutral scheduling pressure however idle it actually was.
+	usable := c.decodeGPU(gpu)
+	if c.sampleAccelerators(gpu) {
+		usable = true
+	}
 	sampledAt := time.Time{}
-	if c.decodeGPU(gpu) {
+	if usable {
 		sampledAt = time.Now()
 	}
 	applyGPUStats(previous, snap, gpu, sampledAt)
 	return snap
+}
+
+// sampleAccelerators folds every sampling source's readings into out and
+// reports whether any of them produced a usable occupancy reading.
+//
+// A source that fails is latched and warned about once, exactly as nvidia-smi
+// is, and does not prevent the others from contributing.
+func (c *statsCollector) sampleAccelerators(out map[string]gpuStat) bool {
+	usable := false
+	for _, sampler := range c.samplers {
+		name := sampler.Name()
+		if c.latch.latched(name) {
+			continue
+		}
+		samples, err := sampler.Sample(context.Background())
+		if err != nil {
+			if c.latch.latch(name) {
+				slog.Warn("accelerator telemetry unavailable; occupancy will not be reported",
+					"source", name, "err", err)
+			}
+			continue
+		}
+		for _, sample := range samples {
+			if sample.StatsKey == "" || !sample.Load.Valid {
+				continue
+			}
+			out[sample.StatsKey] = gpuStat{
+				VRAMUsed:       sample.MemoryUsedBytes,
+				UtilizationPct: uint32(math.Round(sample.Load.Fraction * 100)),
+			}
+			usable = true
+		}
+	}
+	return usable
 }
 
 // decodeGPU queries nvidia-smi and folds the per-GPU results into out, keyed
