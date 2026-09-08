@@ -68,7 +68,7 @@ func detectGPUs() []GPUInfo {
 // linuxAccelSources is the detection chain, in reporting order. Qualcomm and
 // any other accelerator source join this slice; nothing else has to change.
 func linuxAccelSources() []accel.Source {
-	return []accel.Source{nvidiaSource{}}
+	return []accel.Source{nvidiaSource{}, accel.NewQAICSource()}
 }
 
 // nvidiaSource detects NVIDIA GPUs through nvidia-smi.
