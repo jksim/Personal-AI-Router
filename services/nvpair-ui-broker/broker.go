@@ -1495,6 +1495,8 @@ func (b *Broker) proxyForEngine(engine string) *proxyProcess {
 		return b.getProxy()
 	case "lmstudio":
 		return b.getLMStudioProxy()
+	case "max":
+		return b.getMaxProxy()
 	default:
 		return nil
 	}
@@ -2928,6 +2930,49 @@ func (b *Broker) handleMessage(msg *Message) {
 			log.Printf("failed to respond to lmstudio-proxy:unsubscribe: %v", err)
 		}
 
+	case "max-proxy:set-port":
+		b.handleMaxProxySetPort(msg)
+
+	case "max-proxy:get-status":
+		// Answered locally from the max-proxy handle's captured state,
+		// mirroring lmstudio-proxy:get-status. Zero value when none is
+		// supervised.
+		var result ProxyStatusResult
+		if p := b.getMaxProxy(); p != nil {
+			ready, port := p.Status()
+			result.Ready = ready
+			result.Port = port
+		}
+		if err := b.codec.Respond(msg.ID, result); err != nil {
+			log.Printf("failed to respond to max-proxy:get-status: %v", err)
+		}
+
+	case "max-proxy:subscribe":
+		b.proxyMu.Lock()
+		wasSubscribed := b.maxProxySubscribed
+		b.maxProxySubscribed = true
+		b.proxyMu.Unlock()
+		if err := b.codec.Respond(msg.ID, SubscriptionResult{Subscribed: true}); err != nil {
+			log.Printf("failed to respond to max-proxy:subscribe: %v", err)
+		}
+		if !wasSubscribed {
+			if p := b.getMaxProxy(); p != nil {
+				if rp := p.ReadyParams(); rp != nil {
+					if err := b.codec.Notify("max-proxy:ready", rp); err != nil {
+						slog.Warn("emit baseline max-proxy:ready failed", "err", err)
+					}
+				}
+			}
+		}
+
+	case "max-proxy:unsubscribe":
+		b.proxyMu.Lock()
+		b.maxProxySubscribed = false
+		b.proxyMu.Unlock()
+		if err := b.codec.Respond(msg.ID, SubscriptionResult{Subscribed: false}); err != nil {
+			log.Printf("failed to respond to max-proxy:unsubscribe: %v", err)
+		}
+
 	case "workloads:subscribe":
 		b.workloadsMu.Lock()
 		b.workloadsSubscribed = true
@@ -3012,6 +3057,10 @@ func (b *Broker) handleMessage(msg *Message) {
 		// first makes the LM Studio namespace explicit.
 		if strings.HasPrefix(msg.Method, "lmstudio-proxy:") {
 			b.relayToLMStudioProxy(msg)
+			return
+		}
+		if strings.HasPrefix(msg.Method, "max-proxy:") {
+			b.relayToMaxProxy(msg)
 			return
 		}
 		if strings.HasPrefix(msg.Method, "proxy:") {
@@ -3115,6 +3164,17 @@ func (b *Broker) relayToEngine(msg *Message) {
 		}()
 		return
 	}
+	if needsMaxPortGate(msg.Method, msg.Params) && b.maxPortOwnershipPending() {
+		go func() {
+			select {
+			case <-b.maxPortReady:
+				b.relayToEngine(msg)
+			case <-time.After(rpcWorkerCallTimeout):
+				_ = b.codec.RespondError(msg.ID, -32000, "MAX port setup did not finish; retry")
+			}
+		}()
+		return
+	}
 
 	requestedEngine, requestedPort, isEnginePortAssignment := enginePortAssignmentRequest(msg.Method, msg.Params)
 	isOllamaPortAssignment := isEnginePortAssignment && requestedEngine == "ollama"
@@ -3131,6 +3191,13 @@ func (b *Broker) relayToEngine(msg *Message) {
 	if isLMStudioSetPort && requestedLMStudioPort == managedLMStudioFacadePort && b.managedLMStudioFacade.Load() {
 		if err := b.codec.RespondError(msg.ID, -32000, "port 1234 is reserved by the managed LM Studio proxy; choose another backend port or disable managed port ownership and restart NVPAIR"); err != nil {
 			log.Printf("failed to reject conflicting LM Studio engine:set-port: %v", err)
+		}
+		return
+	}
+	requestedMaxPort, isMaxSetPort := maxSetPortRequest(msg.Method, msg.Params)
+	if isMaxSetPort && requestedMaxPort == managedMaxFacadePort && b.managedMaxFacade.Load() {
+		if err := b.codec.RespondError(msg.ID, -32000, "port 8000 is reserved by the managed MAX proxy; choose another backend port or disable managed port ownership and restart NVPAIR"); err != nil {
+			log.Printf("failed to reject conflicting MAX engine:set-port: %v", err)
 		}
 		return
 	}
@@ -3167,6 +3234,9 @@ func (b *Broker) relayToEngine(msg *Message) {
 			}
 			if isLMStudioSetPort {
 				b.lmstudioBackendPort.Store(int32(requestedLMStudioPort))
+			}
+			if isMaxSetPort {
+				b.maxBackendPort.Store(int32(requestedMaxPort))
 			}
 			if e := b.codec.Respond(id, result); e != nil {
 				log.Printf("failed to relay engine result for %s: %v", method, e)

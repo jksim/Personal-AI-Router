@@ -501,3 +501,17 @@ func (b *Broker) reconcileMaxProxyPortOnReadyForGeneration(generation uint64, bo
 	b.markMaxPortReady()
 	b.repushPriority("max")
 }
+
+// handleMaxProxySetPort intercepts max-proxy:set-port rather than relaying it
+// verbatim, mirroring handleLMStudioProxySetPort: the OLLAMA_HOST alias port is
+// reserved, and letting the MAX proxy bind it would orphan the alias.
+func (b *Broker) handleMaxProxySetPort(msg *Message) {
+	var params struct {
+		Port int `json:"port"`
+	}
+	if json.Unmarshal(msg.Params, &params) == nil &&
+		b.rejectOllamaHostAliasPort(msg, params.Port, "the MAX proxy") {
+		return
+	}
+	b.relayToMaxProxy(msg)
+}
