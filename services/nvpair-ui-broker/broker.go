@@ -190,8 +190,20 @@ type Broker struct {
 	lmstudioPortReady                chan struct{}
 	lmstudioPortReadyOnce            sync.Once
 	lmstudioReadyMu                  sync.Mutex
-	store                            *discoveryStore
-	telemetry                        *telemetryCache
+	// The MAX set mirrors the LM Studio set one-for-one. maxEngineKnown has no
+	// LM Studio counterpart: it records whether engine-manager has a MAX engine
+	// at all, which decides whether there is a backend to reconcile against.
+	managedMaxFacade            atomic.Bool
+	maxEngineKnown              atomic.Bool
+	maxBackendPort              atomic.Int32
+	maxProxyStartupPort         atomic.Int32
+	maxProxyGeneration          atomic.Uint64
+	maxProxyPublishedGeneration atomic.Uint64
+	maxPortReady                chan struct{}
+	maxPortReadyOnce            sync.Once
+	maxReadyMu                  sync.Mutex
+	store                       *discoveryStore
+	telemetry                   *telemetryCache
 	// relayDir is the discovery directory, fed by the promoted daemon's
 	// discovery:node-* stream. It runs alongside the legacy store during the
 	// migration; the client-facing get-nodes/subscribe path moves onto it at the
@@ -214,6 +226,7 @@ type Broker struct {
 	nodeInfo      *nodeInfoProcess
 	proxy         *proxyProcess
 	lmstudioProxy *proxyProcess
+	maxProxy      *proxyProcess
 	workloadMgr   *workloadManagerProcess
 	errorsProc    *errorsProcess
 	engineMgr     *rpcWorker
@@ -229,6 +242,7 @@ type Broker struct {
 	nodeInfoSup      *supervisor
 	proxySup         *supervisor
 	lmstudioProxySup *supervisor
+	maxProxySup      *supervisor
 	workloadMgrSup   *supervisor
 	errorsSup        *supervisor
 	engineMgrSup     *supervisor
@@ -245,7 +259,8 @@ type Broker struct {
 	subMu      sync.Mutex
 	subscribed bool
 
-	// proxyMu guards proxySubscribed and lmstudioProxySubscribed. The
+	// proxyMu guards proxySubscribed, lmstudioProxySubscribed and
+	// maxProxySubscribed. The
 	// proxy:<event> / lmstudio-proxy:<event> streams are opt-in like
 	// discovery's: the forward*Notification hooks (on each proxy's reader
 	// goroutine) read the flags while the *:subscribe / *:unsubscribe
@@ -253,6 +268,7 @@ type Broker struct {
 	proxyMu                 sync.Mutex
 	proxySubscribed         bool
 	lmstudioProxySubscribed bool
+	maxProxySubscribed      bool
 
 	// workloadsMu guards workloadsSubscribed. The workloads:* stream is
 	// opt-in too: emitWorkloadEvent (called on the proxy reader goroutine
@@ -388,6 +404,7 @@ func NewBroker(codec *Codec, paths workerPaths) *Broker {
 		workloads:          workloadstore.New(),
 		ollamaPortReady:    make(chan struct{}),
 		lmstudioPortReady:  make(chan struct{}),
+		maxPortReady:       make(chan struct{}),
 	}
 }
 
