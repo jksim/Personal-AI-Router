@@ -70,6 +70,10 @@
 **Dynamic / unresolved notify sites (verify by hand — `npm run service-contracts` prints the line numbers):**
 - `method (var)  (proxy.go)`
 
+## max-proxy
+
+_No JSON-RPC methods detected (HTTP-only binary, or source not present)._
+
 ## nvpair-cluster-manager
 
 | Method | Direction | In bridge? |

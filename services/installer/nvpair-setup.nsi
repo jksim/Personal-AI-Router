@@ -109,6 +109,7 @@ FunctionEnd
   DetailPrint "Checking for running ${PRODUCT_NAME} processes..."
   nsExec::ExecToLog 'taskkill /F /IM "ollama-proxy.exe"'
   nsExec::ExecToLog 'taskkill /F /IM "lmstudio-proxy.exe"'
+  nsExec::ExecToLog 'taskkill /F /IM "max-proxy.exe"'
   nsExec::ExecToLog 'taskkill /F /IM "nvpair-node-info.exe"'
   nsExec::ExecToLog 'taskkill /F /IM "nvpair-node-scanner.exe"'
   nsExec::ExecToLog 'taskkill /F /IM "nvpair-manual-nodes.exe"'
@@ -159,6 +160,10 @@ Section "Install"
   ; same dual-protocol port (loopback plaintext + cluster mTLS ingress); it
   ; listens for clients and browses mDNS, so it gets firewall rules below.
   File "..\build\bin\lmstudio-proxy.exe"
+  ; max-proxy fronts the cluster's Modular MAX engines over the same
+  ; dual-protocol port as the other engine proxies, so it needs the same
+  ; inbound and mDNS rules.
+  File "..\build\bin\max-proxy.exe"
   File "..\build\bin\nvpair-node-info.exe"
   File "..\build\bin\nvpair-node-scanner.exe"
   File "..\build\bin\nvpair-manual-nodes.exe"
@@ -229,6 +234,7 @@ Section "Install"
   ; public networks.
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR Ollama Proxy" dir=in action=allow program="$INSTDIR\bin\ollama-proxy.exe" enable=yes profile=any remoteip=localsubnet'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR LM Studio Proxy" dir=in action=allow program="$INSTDIR\bin\lmstudio-proxy.exe" enable=yes profile=any remoteip=localsubnet'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR MAX Proxy" dir=in action=allow program="$INSTDIR\bin\max-proxy.exe" enable=yes profile=any remoteip=localsubnet'
 
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR Node Info" dir=in action=allow program="$INSTDIR\bin\nvpair-node-info.exe" enable=yes profile=any remoteip=localsubnet'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR Node Scanner" dir=in action=allow program="$INSTDIR\bin\nvpair-node-scanner.exe" enable=yes profile=any remoteip=localsubnet'
@@ -236,6 +242,7 @@ Section "Install"
   ; mDNS needs UDP 5353 inbound
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR mDNS (UDP 5353)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\bin\ollama-proxy.exe" enable=yes profile=any remoteip=localsubnet'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR mDNS LM Studio Proxy (UDP 5353)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\bin\lmstudio-proxy.exe" enable=yes profile=any remoteip=localsubnet'
+  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR mDNS MAX Proxy (UDP 5353)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\bin\max-proxy.exe" enable=yes profile=any remoteip=localsubnet'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR mDNS Node Info (UDP 5353)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\bin\nvpair-node-info.exe" enable=yes profile=any remoteip=localsubnet'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR mDNS Node Scanner (UDP 5353)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\bin\nvpair-node-scanner.exe" enable=yes profile=any remoteip=localsubnet'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="NVPAIR mDNS Workload Manager (UDP 5353)" dir=in action=allow protocol=UDP localport=5353 program="$INSTDIR\bin\nvpair-workload-manager.exe" enable=yes profile=any remoteip=localsubnet'
@@ -272,6 +279,12 @@ Section "Uninstall"
 
   ; Remove firewall exceptions
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="NVPAIR Ollama Proxy"'
+  ; Both MAX rules are removed here. The LM Studio pair above is not deleted by
+  ; this uninstaller -- an upstream omission that leaves two orphaned rules
+  ; behind; it is left alone rather than fixed here to keep this fork's diff
+  ; against upstream small.
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="NVPAIR MAX Proxy"'
+  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="NVPAIR mDNS MAX Proxy (UDP 5353)"'
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="NVPAIR Node Info"'
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="NVPAIR mDNS (UDP 5353)"'
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="NVPAIR Node Scanner"'
@@ -290,6 +303,7 @@ Section "Uninstall"
   ; Remove files
   Delete "$INSTDIR\bin\ollama-proxy.exe"
   Delete "$INSTDIR\bin\lmstudio-proxy.exe"
+  Delete "$INSTDIR\bin\max-proxy.exe"
   Delete "$INSTDIR\bin\nvpair-node-info.exe"
   Delete "$INSTDIR\bin\nvpair-node-scanner.exe"
   Delete "$INSTDIR\bin\nvpair-manual-nodes.exe"

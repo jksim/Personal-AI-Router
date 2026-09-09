@@ -6,6 +6,7 @@ import type { SupportedPlatform } from '@/shared/types/platform'
 export type ModularProcessName =
     | 'proxy'
     | 'lmstudio-proxy'
+    | 'max-proxy'
     | 'broker'
     | 'node-info'
     | 'scanner'
@@ -70,6 +71,14 @@ export const MODULAR_RUNTIME_BINARIES: ModularRuntimeBinary[] = [
         // access to be reachable.
         processName: 'lmstudio-proxy',
         baseName: 'lmstudio-proxy',
+        args: [],
+        launchOwner: 'broker',
+        needsFirewallAccess: true,
+        optional: true
+    },
+    {
+        processName: 'max-proxy',
+        baseName: 'max-proxy',
         args: [],
         launchOwner: 'broker',
         needsFirewallAccess: true,
