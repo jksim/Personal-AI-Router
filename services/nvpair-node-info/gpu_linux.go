@@ -68,6 +68,7 @@ func detectGPUs() []GPUInfo {
 			usesSystemMemoryUsage: device.UsesSystemMemory,
 		})
 	}
+
 	return gpus
 }
 

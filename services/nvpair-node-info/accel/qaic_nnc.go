@@ -22,8 +22,15 @@ import (
 // Everything is little-endian and packed.
 
 const (
-	nncTransactionPassthroughUK = 1 // host -> device
-	nncTransactionPassthroughKU = 2 // device -> host
+	// nncTransactionPassthroughUK is what we send. NNC's own enum defines
+	// only the user/kernel directions (UK = 1, KU = 2).
+	nncTransactionPassthroughUK = 1
+
+	// qaicTransPassthroughFromDev is what comes back, and it is the KERNEL's
+	// constant, not NNC's: the driver stamps QAIC_TRANS_PASSTHROUGH_FROM_DEV
+	// from its own richer enum in the UAPI header. Verified against real
+	// hardware, which returns 3 where NNC's KU would have been 2.
+	qaicTransPassthroughFromDev = 3
 
 	nncCommandStatusReq  = 13
 	nncCommandStatusResp = 14
@@ -52,8 +59,8 @@ const (
 	offInfoFormatVersion = 16
 	offBoardSerial       = 140
 	boardSerialLen       = 32
-	offDramTotalMB       = 176
-	offDramFreeMB        = 180
+	offDramTotalKB       = 176
+	offDramFreeKB        = 180
 	offNspTotal          = 190
 	offNspFree           = 191
 	offSkuType           = 340
@@ -82,8 +89,12 @@ type qaicStatus struct {
 	// report the same serial, which is how they are grouped back together.
 	BoardSerial string
 
-	DramTotalMB uint32
-	DramFreeMB  uint32
+	// DramTotalKB and DramFreeKB are on-device memory in KILOBYTES, despite
+	// QAicHostApiInfo.h commenting both fields as MB. Real hardware settles
+	// it: one Ultra SoC reports 31391744, which is 29.9 GiB as KB and an
+	// impossible 30 TB as MB, and four of them sum to the card's 128 GB.
+	DramTotalKB uint32
+	DramFreeKB  uint32
 
 	// NspTotal and NspFree are neural signal processor counts. Each NSP runs
 	// one workload at a time, which makes their ratio a real occupancy
@@ -138,8 +149,8 @@ func decodeStatusResponse(payload []byte) (qaicStatus, error) {
 		return qaicStatus{}, fmt.Errorf(
 			"qaic status: response is %d bytes, want at least %d", len(payload), nncStatusResponseLen)
 	}
-	if got := binary.LittleEndian.Uint32(payload[0:]); got != nncTransactionPassthroughKU {
-		return qaicStatus{}, fmt.Errorf("qaic status: transaction type %d, want %d", got, nncTransactionPassthroughKU)
+	if got := binary.LittleEndian.Uint32(payload[0:]); got != qaicTransPassthroughFromDev {
+		return qaicStatus{}, fmt.Errorf("qaic status: transaction type %d, want %d", got, qaicTransPassthroughFromDev)
 	}
 	if got := binary.LittleEndian.Uint32(payload[8:]); got != nncCommandStatusResp {
 		return qaicStatus{}, fmt.Errorf("qaic status: command type %d, want %d", got, nncCommandStatusResp)
@@ -160,8 +171,8 @@ func decodeStatusResponse(payload []byte) (qaicStatus, error) {
 
 	return qaicStatus{
 		BoardSerial: decodeFixedString(payload[offBoardSerial : offBoardSerial+boardSerialLen]),
-		DramTotalMB: binary.LittleEndian.Uint32(payload[offDramTotalMB:]),
-		DramFreeMB:  binary.LittleEndian.Uint32(payload[offDramFreeMB:]),
+		DramTotalKB: binary.LittleEndian.Uint32(payload[offDramTotalKB:]),
+		DramFreeKB:  binary.LittleEndian.Uint32(payload[offDramFreeKB:]),
 		NspTotal:    payload[offNspTotal],
 		NspFree:     payload[offNspFree],
 		SkuType:     sku,

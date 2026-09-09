@@ -14,14 +14,15 @@ import (
 // compiling the real headers and printing offsetof.
 func statusResponseFixture(mutate func(b []byte)) []byte {
 	b := make([]byte, nncStatusResponseLen)
-	binary.LittleEndian.PutUint32(b[0:], nncTransactionPassthroughKU)
+	binary.LittleEndian.PutUint32(b[0:], qaicTransPassthroughFromDev)
 	binary.LittleEndian.PutUint32(b[4:], nncStatusResponseLen)
 	binary.LittleEndian.PutUint32(b[8:], nncCommandStatusResp)
 	binary.LittleEndian.PutUint32(b[12:], 0) // status_code: success
 	b[offInfoFormatVersion] = deviceInfoFormatVersion
 	copy(b[offBoardSerial:], "ULTRA-0123456789")
-	binary.LittleEndian.PutUint32(b[offDramTotalMB:], 131072) // 128 GiB in MB
-	binary.LittleEndian.PutUint32(b[offDramFreeMB:], 98304)
+	// Real per-SoC figures from an Ultra: KB, not MB as the header claims.
+	binary.LittleEndian.PutUint32(b[offDramTotalKB:], 31391744)
+	binary.LittleEndian.PutUint32(b[offDramFreeKB:], 31138895)
 	b[offNspTotal] = 16
 	b[offNspFree] = 4
 	b[offSkuType] = skuPCIeUltra
@@ -75,8 +76,8 @@ func TestDecodeStatusResponse(t *testing.T) {
 	if status.BoardSerial != "ULTRA-0123456789" {
 		t.Fatalf("board serial = %q", status.BoardSerial)
 	}
-	if status.DramTotalMB != 131072 || status.DramFreeMB != 98304 {
-		t.Fatalf("dram = %d/%d MB", status.DramFreeMB, status.DramTotalMB)
+	if status.DramTotalKB != 31391744 || status.DramFreeKB != 31138895 {
+		t.Fatalf("dram = %d/%d KB", status.DramFreeKB, status.DramTotalKB)
 	}
 	if status.NspTotal != 16 || status.NspFree != 4 {
 		t.Fatalf("nsp = %d/%d", status.NspFree, status.NspTotal)

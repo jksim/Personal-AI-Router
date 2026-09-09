@@ -58,7 +58,7 @@ func (s *qaicSource) Detect(context.Context) ([]Device, error) {
 	for _, card := range cards {
 		devices = append(devices, Device{
 			Name:      qaicDeviceName(card),
-			VramBytes: uint64(card.DramTotalMB) * 1024 * 1024,
+			VramBytes: card.DramTotalKB * 1024,
 			StatsKey:  qaicStatsKey(card),
 			Vendor:    VendorQualcomm,
 			Kind:      KindAccelerator,
@@ -88,7 +88,7 @@ func (s *qaicSource) Sample(context.Context) ([]DeviceSample, error) {
 			// would be indistinguishable from a genuinely idle card.
 			continue
 		}
-		used := uint64(card.DramTotalMB-card.DramFreeMB) * 1024 * 1024
+		used := (card.DramTotalKB - card.DramFreeKB) * 1024
 		samples = append(samples, DeviceSample{
 			StatsKey:        qaicStatsKey(card),
 			Load:            load,

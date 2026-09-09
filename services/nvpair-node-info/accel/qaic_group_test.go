@@ -64,13 +64,13 @@ func TestMapAccelNodesMissingClassDir(t *testing.T) {
 	}
 }
 
-func socWithStatus(bdf, serial string, dramTotal, dramFree uint32, nspTotal, nspFree uint8) qaicSoCStatus {
+func socWithStatus(bdf, serial string, dramTotalKB, dramFreeKB uint32, nspTotal, nspFree uint8) qaicSoCStatus {
 	return qaicSoCStatus{
 		SoC: qaicSoC{BDF: bdf, DeviceID: 0xa100, Model: "AIC100"},
 		Status: qaicStatus{
 			BoardSerial: serial,
-			DramTotalMB: dramTotal,
-			DramFreeMB:  dramFree,
+			DramTotalKB: dramTotalKB,
+			DramFreeKB:  dramFreeKB,
 			NspTotal:    nspTotal,
 			NspFree:     nspFree,
 			SkuName:     "PCIe Ultra",
@@ -86,10 +86,10 @@ func socWithStatus(bdf, serial string, dramTotal, dramFree uint32, nspTotal, nsp
 func TestGroupQAICCardsUltraIsOneCard(t *testing.T) {
 	const serial = "ULTRA-0001"
 	cards := groupQAICCards([]qaicSoCStatus{
-		socWithStatus("0000:05:00.0", serial, 32768, 32768, 16, 16),
-		socWithStatus("0000:09:00.0", serial, 32768, 24576, 16, 12),
-		socWithStatus("0000:0d:00.0", serial, 32768, 32768, 16, 16),
-		socWithStatus("0000:11:00.0", serial, 32768, 32768, 16, 16),
+		socWithStatus("0000:05:00.0", serial, 31391744, 31391744, 16, 16),
+		socWithStatus("0000:09:00.0", serial, 31391744, 23543808, 16, 12),
+		socWithStatus("0000:0d:00.0", serial, 31391744, 31391744, 16, 16),
+		socWithStatus("0000:11:00.0", serial, 31391744, 31391744, 16, 16),
 	})
 
 	if len(cards) != 1 {
@@ -99,8 +99,9 @@ func TestGroupQAICCardsUltraIsOneCard(t *testing.T) {
 	if len(card.SoCs) != 4 {
 		t.Fatalf("card holds %d SoCs, want 4", len(card.SoCs))
 	}
-	if card.DramTotalMB != 131072 {
-		t.Fatalf("card DRAM = %d MB, want the sum 131072", card.DramTotalMB)
+	// Four Ultra SoCs: 4 x 31391744 KB = 119.7 GiB, the card's 128 GB.
+	if card.DramTotalKB != 4*31391744 {
+		t.Fatalf("card DRAM = %d KB, want the summed %d", card.DramTotalKB, 4*31391744)
 	}
 	if card.NspTotal != 64 || card.NspFree != 60 {
 		t.Fatalf("card NSP = %d/%d, want summed 60/64", card.NspFree, card.NspTotal)
@@ -118,8 +119,8 @@ func TestGroupQAICCardsUltraIsOneCard(t *testing.T) {
 // and would have merged into a phantom double-capacity card.
 func TestGroupQAICCardsSeparatesDistinctSerials(t *testing.T) {
 	cards := groupQAICCards([]qaicSoCStatus{
-		socWithStatus("0000:05:00.0", "CARD-A", 32768, 32768, 16, 16),
-		socWithStatus("0000:09:00.0", "CARD-B", 32768, 32768, 16, 16),
+		socWithStatus("0000:05:00.0", "CARD-A", 31391744, 31391744, 16, 16),
+		socWithStatus("0000:09:00.0", "CARD-B", 31391744, 31391744, 16, 16),
 	})
 
 	if len(cards) != 2 {
@@ -160,9 +161,9 @@ func TestGroupQAICCardsWithoutStatusStaysUngrouped(t *testing.T) {
 // the silent ones stand alone rather than being folded in on an assumption.
 func TestGroupQAICCardsMixedStatus(t *testing.T) {
 	cards := groupQAICCards([]qaicSoCStatus{
-		socWithStatus("0000:05:00.0", "ULTRA-0002", 32768, 32768, 16, 16),
+		socWithStatus("0000:05:00.0", "ULTRA-0002", 31391744, 31391744, 16, 16),
 		{SoC: qaicSoC{BDF: "0000:09:00.0", Model: "AIC100"}},
-		socWithStatus("0000:0d:00.0", "ULTRA-0002", 32768, 32768, 16, 16),
+		socWithStatus("0000:0d:00.0", "ULTRA-0002", 31391744, 31391744, 16, 16),
 	})
 
 	if len(cards) != 2 {
