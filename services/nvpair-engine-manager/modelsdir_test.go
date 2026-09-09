@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,5 +90,38 @@ func TestLoadRestartsEngineIsDerivedNotListed(t *testing.T) {
 	}
 	if loadRestartsEngine("no-such-engine") {
 		t.Error("an unknown engine claimed a restarting load")
+	}
+}
+
+// TestCmdActionsResolveModelsDir pins that a command-based model listing can
+// name the directory it enumerates.
+//
+// models_dir was seeded only for remove_path actions, which was invisible while
+// the one engine using it deleted by path. An engine whose list_models is a
+// command failed at runtime with "unresolved placeholder {models_dir}" — caught
+// by a live test, not by the suite, which is why this exists.
+func TestCmdActionsResolveModelsDir(t *testing.T) {
+	m := testEngineManifest(fakeEngineBin)
+	m.Engine = "max"
+	m.DisplayName = "max"
+	m.Actions = map[string]Action{
+		"list_models": {Cmd: []string{fakeEngineBin, "echo", "{models_dir}"}},
+	}
+	ex := newTestExecutor(t, m)
+	st, err := ex.state("max")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.mu.Lock()
+	st.installed, st.running, st.healthy = true, true, true
+	st.mu.Unlock()
+
+	out, err := ex.Action(context.Background(), "max", "list_models", nil)
+	if err != nil {
+		t.Fatalf("list_models: %v", err)
+	}
+	want := engineModelsDir("max")
+	if !strings.Contains(string(out), want) {
+		t.Fatalf("list_models output = %s, want it to contain the resolved models dir %q", out, want)
 	}
 }

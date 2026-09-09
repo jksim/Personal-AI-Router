@@ -275,7 +275,7 @@ func startManager(t *testing.T, env map[string]string) (chan frame, io.WriteClos
 func startManagerWithManifest(t *testing.T, m Manifest) (chan frame, io.WriteCloser, func()) {
 	t.Helper()
 	cfg := t.TempDir()
-	engdir := filepath.Join(cfg, configSubdir, "engines")
+	engdir := filepath.Join(cfg, liveConfigSubdir, "engines")
 	if err := os.MkdirAll(engdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -320,3 +320,11 @@ func downloadTo(t *testing.T, url string) string {
 	}
 	return f.Name()
 }
+
+// liveConfigSubdir mirrors nvpair-shared/appdir's two-level vendor/product
+// layout, which is what the manager resolves its override dir to under the
+// HOME/XDG base these tests point at.
+//
+// It replaces an undefined configSubdir that left the whole `live` build tag
+// uncompilable, so none of these tests could run at all.
+const liveConfigSubdir = "Nvidia Corporation/Personal AI Router"

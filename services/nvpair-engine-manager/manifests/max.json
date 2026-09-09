@@ -4,7 +4,9 @@
   "manifest_version": 1,
   "platforms": {
     "linux/amd64": {
-      "detect": ["{install_dir}/venv/bin/max"],
+      "detect": [
+        "{install_dir}/venv/bin/max"
+      ],
       "install": {
         "fetch": {
           "url": "https://github.com/astral-sh/uv/releases/download/0.12.11/uv-x86_64-unknown-linux-gnu.tar.gz",
@@ -13,23 +15,32 @@
         "run": [
           "sh",
           "-c",
-          "set -e; mkdir -p \"$0/uv\"; tar -xzf \"$1\" --strip-components=1 -C \"$0/uv\"; UV_CACHE_DIR=\"$0/cache\" UV_PYTHON_INSTALL_DIR=\"$0/python\" \"$0/uv/uv\" venv \"$0/venv\" --python 3.12; UV_CACHE_DIR=\"$0/cache\" UV_PYTHON_INSTALL_DIR=\"$0/python\" \"$0/uv/uv\" pip install --python \"$0/venv/bin/python\" \"max[serve]==26.5.0\"; rm -rf \"$0/cache\"",
-          "{install_dir}",
-          "{download}"
+          "set -e; mkdir -p '{install_dir}/uv'; tar -xzf '{download}' --strip-components=1 -C '{install_dir}/uv'; UV_CACHE_DIR='{install_dir}/cache' UV_PYTHON_INSTALL_DIR='{install_dir}/python' '{install_dir}/uv/uv' venv '{install_dir}/venv' --python 3.12; UV_CACHE_DIR='{install_dir}/cache' UV_PYTHON_INSTALL_DIR='{install_dir}/python' '{install_dir}/uv/uv' pip install --python '{install_dir}/venv/bin/python' 'max[serve]==26.5.0' 'nvidia-cublas-cu12' 'nvidia-cuda-nvrtc-cu12'; rm -rf '{install_dir}/cache'"
         ],
         "mode": "user"
       },
       "uninstall": {
-        "run": ["rm", "-rf", "{install_dir}"]
+        "run": [
+          "rm",
+          "-rf",
+          "{install_dir}"
+        ]
       },
       "runtime": {
         "mode": "process",
         "bin": "{install_dir}/venv/bin/max",
-        "args": ["serve", "--model", "{model}", "--port", "{port}"],
+        "args": [
+          "serve",
+          "--model",
+          "{model}",
+          "--port",
+          "{port}"
+        ],
         "env": {
           "MAX_SERVE_HOST": "{host}",
           "MAX_SERVE_DISABLE_TELEMETRY": "1",
-          "HF_HUB_DISABLE_TELEMETRY": "1"
+          "HF_HUB_DISABLE_TELEMETRY": "1",
+          "LD_LIBRARY_PATH": "{install_dir}/venv/lib/python3.12/site-packages/nvidia/cublas/lib:{install_dir}/venv/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib"
         },
         "bind": "127.0.0.1",
         "port": 8001,
@@ -38,7 +49,10 @@
           "status": 200,
           "timeout_s": 600
         },
-        "stop": { "signal": "term", "grace_s": 30 },
+        "stop": {
+          "signal": "term",
+          "grace_s": 30
+        },
         "health": {
           "http": "http://127.0.0.1:{port}/health",
           "status": 200,
@@ -58,12 +72,25 @@
     },
     "loaded_models": {
       "description": "List the model MAX is currently serving. MAX serves one model per process, so this returns at most one entry.",
-      "http": { "method": "GET", "path": "/v1/models" },
-      "result": { "array": "data", "field": "id" }
+      "http": {
+        "method": "GET",
+        "path": "/v1/models"
+      },
+      "result": {
+        "array": "data",
+        "field": "id"
+      }
     },
     "chat": {
       "description": "OpenAI-compatible chat completion (params: {\"model\": \"<name>\", \"messages\": [...]}).",
-      "http": { "method": "POST", "path": "/v1/chat/completions", "body_schema": { "model": "string", "messages": "array" } }
+      "http": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body_schema": {
+          "model": "string",
+          "messages": "array"
+        }
+      }
     }
   }
 }

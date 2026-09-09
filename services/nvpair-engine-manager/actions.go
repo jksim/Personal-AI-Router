@@ -233,6 +233,11 @@ func (e *Executor) runCmdAction(ctx context.Context, st *engineState, act Action
 	}
 	vars["port"] = strconv.Itoa(port)
 	vars["install_dir"] = st.installDir
+	// models_dir is seeded here as well as in remove_path, because an engine
+	// whose model listing is a command (rather than an endpoint) has to name
+	// the directory it enumerates. Both are runner-owned and were already
+	// dropped from the caller's params above.
+	vars["models_dir"] = engineModelsDir(st.manifest.Engine)
 	if cli := st.plat.Runtime.CLI; cli != "" {
 		vars["cli"] = expandPath(cli)
 	}
