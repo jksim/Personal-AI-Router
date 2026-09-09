@@ -206,6 +206,14 @@ type Action struct {
 type ActionResult struct {
 	Array string `json:"array"` // top-level array field, e.g. "models" / "data"
 	Field string `json:"field"` // string field per element, e.g. "name" / "id"
+	// Lines reads the action's output as plain text, one model per line,
+	// instead of as JSON. It is how a command-based inventory reports: an
+	// engine with no model-list endpoint enumerates its own store and prints
+	// what it finds, and requiring it to emit JSON from a shell would trade a
+	// trivial parse here for quoting bugs there.
+	//
+	// Mutually exclusive with array/field.
+	Lines bool `json:"lines,omitempty"`
 	// Match, when set, keeps only array elements that pass the ResultMatch
 	// filter. It lets loaded_models reuse the same extractor as list_models
 	// across engines whose list endpoint tags residency (LM Studio's
@@ -664,8 +672,17 @@ func (a *Action) validate(name string) error {
 	if hasHTTP && (strings.TrimSpace(a.HTTP.Method) == "" || strings.TrimSpace(a.HTTP.Path) == "") {
 		return fmt.Errorf("action %q: http.method and http.path are required", name)
 	}
-	if a.Result != nil && (strings.TrimSpace(a.Result.Array) == "" || strings.TrimSpace(a.Result.Field) == "") {
-		return fmt.Errorf("action %q: result.array and result.field are required when result is set", name)
+	if a.Result != nil {
+		hasArrayField := strings.TrimSpace(a.Result.Array) != "" && strings.TrimSpace(a.Result.Field) != ""
+		if a.Result.Lines && hasArrayField {
+			return fmt.Errorf("action %q: result.lines cannot be combined with result.array/result.field", name)
+		}
+		if !a.Result.Lines && !hasArrayField {
+			return fmt.Errorf("action %q: result needs either result.lines or both result.array and result.field", name)
+		}
+		if a.Result.Lines && a.Result.Match != nil {
+			return fmt.Errorf("action %q: result.match filters JSON rows and cannot be used with result.lines", name)
+		}
 	}
 	if a.Result != nil && a.Result.Match != nil {
 		m := a.Result.Match

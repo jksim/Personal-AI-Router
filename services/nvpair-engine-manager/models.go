@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -184,6 +185,9 @@ func extractStrings(raw json.RawMessage, spec *ActionResult) []string {
 // unfiltered inventory, however, a non-empty array with no usable names is
 // malformed rather than authoritative empty.
 func extractStringsResult(raw json.RawMessage, spec *ActionResult) ([]string, bool) {
+	if spec.Lines {
+		return extractLinesResult(raw)
+	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, false
@@ -244,4 +248,24 @@ func matchRow(el map[string]json.RawMessage, m *ResultMatch) bool {
 		}
 	}
 	return false
+}
+
+// extractLinesResult reads a command action's stdout as one model per line.
+//
+// A cmd action's result is the process's output as a JSON string, so this
+// decodes that string and splits it. Blank lines are dropped — a shell loop
+// over an empty directory prints nothing, and an engine with no models
+// installed is a successful empty inventory, not a failure.
+func extractLinesResult(raw json.RawMessage) ([]string, bool) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return nil, false
+	}
+	out := make([]string, 0)
+	for _, line := range strings.Split(text, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out, true
 }
