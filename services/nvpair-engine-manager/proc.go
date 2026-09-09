@@ -28,8 +28,16 @@ type managedProc struct {
 // over the current environment), hides any console window, and streams
 // stdout/stderr lines to onLine. The returned proc's done channel
 // closes once the process exits.
-func startManagedProc(bin string, args []string, env map[string]string, onLine func(stream, line string)) (*managedProc, error) {
+func startManagedProc(bin string, args []string, env map[string]string, workDir string, onLine func(stream, line string)) (*managedProc, error) {
 	cmd := exec.Command(bin, args...)
+	// Run the engine somewhere NVPAIR chose, not wherever NVPAIR happened to be
+	// launched from. An inherited working directory is config the user never
+	// agreed to: MAX reads a .env from its working directory, and a stray one
+	// would override the loopback bind this manifest sets, publishing the engine
+	// on the LAN. An empty workDir keeps the inherited behaviour.
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
 	if len(env) > 0 {
 		cmd.Env = os.Environ()
 		for k, v := range env {
@@ -173,4 +181,21 @@ func isManagedInstallPath(binPath, installDir string) bool {
 		return false
 	}
 	return true
+}
+
+// processWorkDir is the directory a supervised engine runs in: its own install
+// dir when that exists, else the inherited one.
+//
+// It falls back rather than failing because an adopted engine — one already on
+// PATH that NVPAIR did not install — has no install dir of its own, and
+// refusing to start it would be worse than the inherited directory it would
+// have had anyway.
+func processWorkDir(installDir string) string {
+	if installDir == "" {
+		return ""
+	}
+	if info, err := os.Stat(installDir); err != nil || !info.IsDir() {
+		return ""
+	}
+	return installDir
 }

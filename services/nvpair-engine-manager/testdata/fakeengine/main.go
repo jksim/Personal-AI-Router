@@ -83,6 +83,13 @@ func main() {
 		case "echo": // print args to stdout so a cmd-action can capture output
 			fmt.Println(strings.Join(os.Args[2:], " "))
 			return
+		case "pwd": // print the working directory so a test can assert where
+			// the engine was launched — a stray config file in an inherited
+			// directory is settings the user never chose.
+			if wd, err := os.Getwd(); err == nil {
+				fmt.Println(wd)
+			}
+			return
 		case "resolvesim": // stand in for `lms get`: succeed only for a Hugging
 			// Face URL (and only when it doesn't name a "nope" repo), else emit
 			// LM Studio's resolve-failure on stderr and exit non-zero. Lets a

@@ -250,7 +250,7 @@ func (e *Executor) bringUpProcess(ctx context.Context, st *engineState, engine s
 		env[k] = rv
 	}
 
-	proc, err := startManagedProc(binPath, args, env, func(stream, line string) {
+	proc, err := startManagedProc(binPath, args, env, processWorkDir(st.installDir), func(stream, line string) {
 		st.logs.append(stream, line)
 	})
 	if err != nil {
