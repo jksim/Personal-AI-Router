@@ -21,6 +21,7 @@ import (
 var (
 	proxyBin         string
 	lmstudioProxyBin string
+	maxProxyBin      string
 	errorsBin        string
 	nodeInfoBin      string
 	scannerBin       string
@@ -46,6 +47,7 @@ func TestMain(m *testing.M) {
 
 	proxyBin = filepath.Join(tmpDir, "ollama-proxy"+ext)
 	lmstudioProxyBin = filepath.Join(tmpDir, "lmstudio-proxy"+ext)
+	maxProxyBin = filepath.Join(tmpDir, "max-proxy"+ext)
 	errorsBin = filepath.Join(tmpDir, "nvpair-errors"+ext)
 	nodeInfoBin = filepath.Join(tmpDir, "nvpair-node-info"+ext)
 	scannerBin = filepath.Join(tmpDir, "nvpair-node-scanner"+ext)
@@ -69,6 +71,15 @@ func TestMain(m *testing.M) {
 	if err := goBuild(filepath.Join("..", "lmstudio-proxy"), lmstudioProxyBin); err != nil {
 		os.RemoveAll(tmpDir)
 		log.Fatalf("build lmstudio-proxy: %v", err)
+	}
+
+	// max-proxy is the first engine built on the shared openai-proxy library,
+	// so building it here also proves that library compiles as a dependency
+	// rather than only as its own module.
+	log.Println("building max-proxy...")
+	if err := goBuild(filepath.Join("..", "max-proxy"), maxProxyBin); err != nil {
+		os.RemoveAll(tmpDir)
+		log.Fatalf("build max-proxy: %v", err)
 	}
 
 	log.Println("building nvpair-errors...")
