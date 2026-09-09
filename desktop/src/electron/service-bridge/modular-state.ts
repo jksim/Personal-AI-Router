@@ -33,20 +33,21 @@ import { serviceLogLevel } from './service-log-level'
 // Live node sources are the two reverse proxies, relayed through the broker,
 // and the broker's consolidated discovery snapshot. Electron does not consume
 // worker discovery protocols directly.
-type ProxyNodeSource = 'ollama-proxy' | 'lmstudio-proxy'
+type ProxyNodeSource = 'ollama-proxy' | 'lmstudio-proxy' | 'max-proxy'
 type BrokerNodeSource = ProxyNodeSource | 'broker'
 
 /**
  * Engines surfaced by the broker's proxy plane. Other engine-manager engines
  * are not currently routed across nodes.
  */
-export type ProxyEngine = Extract<EngineType, 'ollama' | 'lm-studio'>
-export const PROXY_ENGINES: readonly ProxyEngine[] = ['ollama', 'lm-studio']
+export type ProxyEngine = Extract<EngineType, 'ollama' | 'lm-studio' | 'max'>
+export const PROXY_ENGINES: readonly ProxyEngine[] = ['ollama', 'lm-studio', 'max']
 
 /** Map a proxy node source onto the engine it describes. */
 const PROXY_SOURCE_ENGINE: Record<ProxyNodeSource, ProxyEngine> = {
     'ollama-proxy': 'ollama',
-    'lmstudio-proxy': 'lm-studio'
+    'lmstudio-proxy': 'lm-studio',
+    'max-proxy': 'max'
 }
 
 /** Per-engine presence on a node — each proxy reports its own engine. */
@@ -164,7 +165,10 @@ function emptyPresence(): EnginePresence {
 }
 
 function emptyEngines(): Record<ProxyEngine, EnginePresence> {
-    return { ollama: emptyPresence(), 'lm-studio': emptyPresence() }
+    return Object.fromEntries(PROXY_ENGINES.map(e => [e, emptyPresence()])) as Record<
+        ProxyEngine,
+        EnginePresence
+    >
 }
 
 /** Immutably set one engine's presence, preserving the other. */
@@ -173,10 +177,7 @@ function setEngine(
     engine: ProxyEngine,
     presence: EnginePresence
 ): Record<ProxyEngine, EnginePresence> {
-    return {
-        ollama: engine === 'ollama' ? presence : engines.ollama,
-        'lm-studio': engine === 'lm-studio' ? presence : engines['lm-studio']
-    }
+    return { ...engines, [engine]: presence }
 }
 
 /**
@@ -899,8 +900,11 @@ class ModularBridgeState {
     private logs: LogEntry[] = []
     // Per-engine bound proxy port reported by the broker. 0 = not reported yet;
     // we never fabricate a default — an unknown port surfaces as null, not a
-    // guess. `ollama` is the `ollama-proxy`, `lm-studio` is the `lmstudio-proxy`.
-    private proxyPorts: Record<ProxyEngine, number> = { ollama: 0, 'lm-studio': 0 }
+    // guess. Each key is that engine's reverse proxy: `ollama` the
+    // `ollama-proxy`, `lm-studio` the `lmstudio-proxy`, `max` the `max-proxy`.
+    private proxyPorts: Record<ProxyEngine, number> = Object.fromEntries(
+        PROXY_ENGINES.map(e => [e, 0])
+    ) as Record<ProxyEngine, number>
     private selfId: string | null = null
     /**
      * Authoritative local-engine facts from `nvpair-engine-manager`, keyed by
@@ -2285,6 +2289,10 @@ class ModularBridgeState {
         }
         if (notification.source === 'lmstudio-proxy') {
             this.handleProxyNotification(notification, 'lm-studio')
+            return
+        }
+        if (notification.source === 'max-proxy') {
+            this.handleProxyNotification(notification, 'max')
             return
         }
         if (notification.source === 'broker') {

@@ -4,6 +4,7 @@
 import type { EngineType } from '@/shared/types/engines'
 import type { EngineHubModel, EngineHubSearchResponse } from '@/shared/types/engine-api'
 import { loadOllamaModels, type OllamaTagsModel } from '@/electron/model-hub/ollama-library'
+import { loadMaxModels } from './max-library'
 import {
     lmStudioCatalogCache,
     type LmStudioCatalogModel
@@ -43,7 +44,8 @@ function lmStudioToHubModel(m: LmStudioCatalogModel): EngineHubModel {
  * Serve an engine's model hub. Ollama is served from the committed, locked list
  * (`ollama-models.json`), so it returns instantly with no network access. LM
  * Studio still fetches its live `lmstudio-community` catalog and awaits a cold
- * cache's initial load. Engines without a hub return empty.
+ * cache's initial load. MAX is a committed list too (`max-models.json`), because
+ * it has no catalog endpoint to query. Engines without a hub return empty.
  */
 export async function getEngineHubModels(engineType: EngineType): Promise<EngineHubSearchResponse> {
     switch (engineType) {
@@ -52,6 +54,8 @@ export async function getEngineHubModels(engineType: EngineType): Promise<Engine
         case 'lm-studio':
             await lmStudioCatalogCache.ensureLoaded()
             return { models: lmStudioCatalogCache.list().map(lmStudioToHubModel) }
+        case 'max':
+            return { models: loadMaxModels() }
         default:
             return { models: [] }
     }

@@ -366,7 +366,7 @@ export async function startInferenceDemo(): Promise<DemoState> {
         // Deliberately names no port: the proxies own their listeners, and
         // quoting a number here would be the same mistake as hardcoding one.
         throw new Error(
-            'No local inference engine exposed a text-generation model. Start Ollama or LM Studio, wait for it to appear in Settings, and try again.'
+            'No local inference engine exposed a text-generation model. Start one of your installed engines, wait for it to appear in Settings, and try again.'
         )
     }
 

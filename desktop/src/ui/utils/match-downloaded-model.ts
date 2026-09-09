@@ -38,7 +38,9 @@ const matchHfPullKeyOrName: DownloadedMatcher = (hubEntry, d) => {
 
 const MATCHERS: Partial<Record<EngineType, DownloadedMatcher>> = {
     ollama: matchOllama,
-    'lm-studio': matchHfPullKeyOrName
+    'lm-studio': matchHfPullKeyOrName,
+    // MAX models are HuggingFace repo ids, matched the same way LM Studio's are.
+    max: matchHfPullKeyOrName
 }
 
 export function isHubEntryDownloaded(

@@ -27,7 +27,8 @@ const MANIFEST_DIR = path.resolve(process.cwd(), '../services/nvpair-engine-mana
 /** Manifest engine ids differ from our `EngineType` for LM Studio only. */
 const ENGINE_TYPE_BY_MANIFEST_ID: Record<string, EngineType> = {
     ollama: 'ollama',
-    lmstudio: 'lm-studio'
+    lmstudio: 'lm-studio',
+    max: 'max'
 }
 
 interface ManifestAction {
@@ -68,7 +69,13 @@ describe('delete-model restart is scoped to LM Studio', () => {
     it('every engine that bounces on delete also warns the user first', () => {
         for (const manifest of readManifests()) {
             const engineType = ENGINE_TYPE_BY_MANIFEST_ID[manifest.engine]
-            if (!engineType) continue
+            // A manifest missing from the map used to be skipped silently,
+            // which meant a newly shipped engine was exempt from every
+            // assertion below without anything saying so.
+            expect(
+                engineType,
+                `manifest "${manifest.engine}" is not in ENGINE_TYPE_BY_MANIFEST_ID, so it is exempt from these checks`
+            ).toBeDefined()
             const bounces = manifest.actions?.delete_model?.restart_after === true
             expect(
                 EngineCapabilities[engineType].restartsOnModelDelete ?? false,

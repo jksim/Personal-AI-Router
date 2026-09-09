@@ -299,12 +299,26 @@ function engineManagerId(engine: ProxyEngine): string {
 function proxyEngineFromManagerId(id: string): ProxyEngine | null {
     if (id === 'ollama') return 'ollama'
     if (id === 'lmstudio') return 'lm-studio'
+    if (id === 'max') return 'max'
     return null
 }
 
-/** The broker relay namespace fronting an engine's reverse proxy. */
+/**
+ * The broker relay namespace fronting an engine's reverse proxy.
+ *
+ * A total map rather than a ternary on purpose. The old form returned LM
+ * Studio's namespace for anything that was not Ollama, so a new engine was
+ * silently relayed to the wrong proxy — which answers perfectly well, with
+ * another engine's nodes. A missing entry here is now a compile error.
+ */
+const PROXY_RELAY_PREFIX: Record<ProxyEngine, string> = {
+    ollama: 'proxy',
+    'lm-studio': 'lmstudio-proxy',
+    max: 'max-proxy'
+}
+
 function proxyRelayPrefix(engine: ProxyEngine): string {
-    return engine === 'ollama' ? 'proxy' : 'lmstudio-proxy'
+    return PROXY_RELAY_PREFIX[engine]
 }
 
 /**
@@ -1079,7 +1093,7 @@ class ModularSupervisor {
             const obj = objectValue(result)
             if (obj && booleanValue(obj.ready)) {
                 getModularBridgeState().handleNotification({
-                    source: engine === 'ollama' ? 'proxy' : 'lmstudio-proxy',
+                    source: proxyRelayPrefix(engine),
                     method: 'ready',
                     params: { port: numberValue(obj.port) }
                 })
@@ -1100,7 +1114,7 @@ class ModularSupervisor {
             if (!obj || !Array.isArray(obj.nodes)) return
             for (const node of obj.nodes) {
                 getModularBridgeState().handleNotification({
-                    source: engine === 'ollama' ? 'proxy' : 'lmstudio-proxy',
+                    source: proxyRelayPrefix(engine),
                     method: 'node/discovered',
                     params: node
                 })
@@ -1316,21 +1330,20 @@ class ModularSupervisor {
         this.readinessWaiters.clear()
     }
 
-    /** Rewrite broker `proxy:`/`lmstudio-proxy:` relay frames into proxy-source events. */
+    /** Rewrite broker `proxy:`/`lmstudio-proxy:`/`max-proxy:` relay frames into proxy-source events. */
     private normalizeBrokerProxy(notification: JsonRpcNotification): JsonRpcNotification {
         if (notification.source !== 'broker') return notification
-        if (notification.method.startsWith('lmstudio-proxy:')) {
-            return {
-                source: 'lmstudio-proxy',
-                method: notification.method.slice('lmstudio-proxy:'.length),
-                params: notification.params
-            }
-        }
-        if (notification.method.startsWith('proxy:')) {
-            return {
-                source: 'proxy',
-                method: notification.method.slice('proxy:'.length),
-                params: notification.params
+        // Longest prefix first: `proxy:` is a prefix of nothing here, but a
+        // namespace that ends in `-proxy:` must be matched before it so a
+        // future one cannot be swallowed.
+        for (const engine of PROXY_ENGINES) {
+            const prefix = `${proxyRelayPrefix(engine)}:`
+            if (notification.method.startsWith(prefix)) {
+                return {
+                    source: proxyRelayPrefix(engine),
+                    method: notification.method.slice(prefix.length),
+                    params: notification.params
+                }
             }
         }
         return notification

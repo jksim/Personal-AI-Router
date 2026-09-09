@@ -43,5 +43,27 @@ export const EngineCapabilities: Record<EngineType, EngineCaps> = {
         // server. Deleting therefore interrupts inference and needs a warning.
         restartsOnModelDelete: true,
         engineHub: { label: 'LM Studio', url: 'https://lmstudio.ai/models' }
+    },
+    max: {
+        hasExpiry: false,
+        // MAX serves one model per process with no hot swap, so there is
+        // nothing to eject: the model is unloaded by stopping the engine or
+        // by selecting a different one, which relaunches it.
+        hasEject: false,
+        hasInstall: ['linux'],
+        hasEnginePort: true,
+        hasInstallPath: false,
+        hasProxyWebUI: false,
+        hasPreferredNode: false,
+        hasCrashAlert: false,
+        hasModelSearchOnlyWhenRunning: false,
+        // Choosing a model is launch configuration rather than a model
+        // operation, so it is available while the engine is stopped — that is
+        // the normal way to pick what it will serve when it next starts.
+        modelOpsWhenStopped: true,
+        // Deleting would remove the model from the shared HuggingFace cache,
+        // which other tools on the machine may be using. Not offered.
+        hasDeleteModel: false,
+        engineHub: { label: 'Modular', url: 'https://builds.modular.com/' }
     }
 }

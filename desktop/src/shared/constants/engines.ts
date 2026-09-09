@@ -9,23 +9,31 @@ import { EngineType, ModelExpiry } from '@/shared/types/engines'
 // never-enabled placeholders; they were removed with the chat window, which was
 // their only in-app consumer. Adding an engine back means shipping its manifest
 // first -- an engine row without one renders commands that fail with `-32000`.
-export const EngineTypes = ['ollama', 'lm-studio'] as const
+export const EngineTypes = ['ollama', 'lm-studio', 'max'] as const
 
 // Kept as a distinct export so a future engine can ship behind it rather than
-// appearing the moment its type exists.
-export const EnabledEngineTypes: EngineType[] = ['ollama', 'lm-studio'] as const
+// appearing the moment its type exists. MAX joined it only once its manifest
+// installed, served and stopped cleanly on real hardware, and once every
+// engine === 'ollama' ? … : … branch that silently meant LM Studio had been
+// audited -- those compile fine and route the wrong engine.
+export const EnabledEngineTypes: EngineType[] = ['ollama', 'lm-studio', 'max'] as const
 
 export const EngineSources = ['bundled', 'detected', 'installed'] as const
 
 export const EngineDisplayNames: Record<EngineType, string> = {
     ollama: 'Ollama',
-    'lm-studio': 'LM Studio'
+    'lm-studio': 'LM Studio',
+    max: 'MAX'
 } as const
 
 /** Default docs/install URLs for built-in backends. Single source of truth for UI and adapter buildInfo(). */
 export const EngineDefaultLinks: Record<EngineType, { docsUrl: string; installUrl: string }> = {
     ollama: { docsUrl: 'https://docs.ollama.com/', installUrl: 'https://ollama.com/download' },
-    'lm-studio': { docsUrl: 'https://lmstudio.ai/docs', installUrl: 'https://lmstudio.ai/' }
+    'lm-studio': { docsUrl: 'https://lmstudio.ai/docs', installUrl: 'https://lmstudio.ai/' },
+    max: {
+        docsUrl: 'https://docs.modular.com/max/',
+        installUrl: 'https://docs.modular.com/max/packages'
+    }
 } as const
 
 export const ModelItemStatuses = ['idle', 'loading', 'loaded', 'ejecting', 'pulling'] as const
