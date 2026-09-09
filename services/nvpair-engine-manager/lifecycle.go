@@ -173,6 +173,16 @@ func (e *Executor) doStart(ctx context.Context, st *engineState, engine string, 
 	if rt.CLI != "" {
 		vars["cli"] = expandPath(rt.CLI)
 	}
+	// An engine that serves one model per process names it in its launch args.
+	// Refuse to start with nothing selected rather than substituting an empty
+	// string: the engine would either fail with its own opaque usage error or,
+	// worse, start on a default nobody chose.
+	if runtimeNeedsModel(rt) {
+		if strings.TrimSpace(rt.Model) == "" {
+			return fmt.Errorf("engine %q serves one model at a time and none is selected; choose a model first", engine)
+		}
+		vars["model"] = rt.Model
+	}
 
 	st.mu.Lock()
 	st.port = port
@@ -871,4 +881,28 @@ func fileExists(p string) bool {
 	}
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// runtimeNeedsModel reports whether this engine's launch strings template
+// {model}, which is what makes it a one-model-per-process engine.
+//
+// It is derived from the manifest rather than stored as a flag, so an engine
+// becomes model-configured by templating its args and nothing else has to agree.
+func runtimeNeedsModel(rt Runtime) bool {
+	strs := append([]string{rt.Bin}, rt.Args...)
+	for _, cmd := range rt.Start {
+		strs = append(strs, cmd...)
+	}
+	for _, v := range rt.Env {
+		strs = append(strs, v)
+	}
+	if rt.Stop != nil {
+		strs = append(strs, rt.Stop.Cmd...)
+	}
+	for _, s := range strs {
+		if strings.Contains(s, "{model}") {
+			return true
+		}
+	}
+	return false
 }
