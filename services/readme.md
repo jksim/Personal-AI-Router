@@ -35,7 +35,7 @@ see the [root README](../README.md#what-is-supported).
 
 ## Architecture
 
-This tree builds thirteen Go binaries. `nvpair-ui-broker` is the parent service and supervises the eleven workers, all spawned at startup — only the scanner is required, and a missing binary for any other leaves the broker running without that capability. `nvpair-tui` is the thirteenth: a terminal client that launches and supervises its own broker rather than being supervised. Processes communicate via newline-delimited JSON-RPC 2.0 over stdio or, optionally, a Unix socket / Windows named pipe.
+This tree builds fourteen Go binaries. `nvpair-ui-broker` is the parent service and supervises the twelve workers, all spawned at startup — only the scanner is required, and a missing binary for any other leaves the broker running without that capability. `nvpair-tui` is the last: a terminal client that launches and supervises its own broker rather than being supervised. Processes communicate via newline-delimited JSON-RPC 2.0 over stdio or, optionally, a Unix socket / Windows named pipe.
 
 | Binary | Role |
 | --- | --- |
@@ -84,8 +84,8 @@ shared/                   Shared Go module (nvpair-shared/…)
 eap-noob/                 EAP-NOOB implementation used by cluster pairing
 tests/                    Cross-process integration tests (separate go.mod)
 versions.json             Single source of truth for every component version
-build.bat                 Builds all thirteen binaries (Windows)
-build.sh                  Builds all thirteen binaries (Linux)
+build.bat                 Builds all fourteen binaries (Windows)
+build.sh                  Builds all fourteen binaries (Linux)
 VERSIONING.md             SemVer rules and version-bump workflow
 ```
 
@@ -115,7 +115,7 @@ On Linux and macOS:
 ./build.sh
 ```
 
-Both scripts read `versions.json`, build all thirteen Go binaries with `-X main.Version=…` ldflags, and stage them together in `services/build/bin/`.
+Both scripts read `versions.json`, build all fourteen Go binaries with `-X main.Version=…` ldflags, and stage them together in `services/build/bin/`.
 
 Do **not** build individual components by hand without also copying their binaries into `build/bin/`: the broker will silently keep using the older binary there.
 
@@ -190,7 +190,7 @@ cd shared
 go test ./...
 ```
 
-**Every one of the thirteen binaries has tests**, as do `shared/` and
+**Every one of the fourteen binaries has tests**, as do `shared/` and
 `eap-noob/`. Depth varies with how much behaviour a component carries:
 `nvpair-engine-manager` and `nvpair-cluster-manager` have the largest suites,
 while a component with one test file may still hold twenty test functions in it.
