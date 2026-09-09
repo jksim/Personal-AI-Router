@@ -25,32 +25,40 @@ import (
 // collector from blocking indefinitely.
 const nvidiaSmiTimeout = 3 * time.Second
 
+// detectGPUsTimeout bounds all of startup detection.
+//
+// detectGPUs runs before the HTTP listener binds, so anything that blocks here
+// blocks the service entirely — and hardware in a bad state really does block:
+// a wedged accelerator throwing PCIe errors stalled a sysfs walk long enough to
+// stop node-info starting at all. Reporting less hardware is always better than
+// not starting.
+const detectGPUsTimeout = 10 * time.Second
+
 // detectGPUs enumerates accelerators on Linux by running the source chain and
 // mapping what it finds onto the wire type. NVIDIA's source yields the
-// marketing name, total VRAM, and a stable per-GPU UUID we reuse as the join
-// key (statsKey) against the dynamic stats collector's snapshot. When no source
-// reports anything — no NVIDIA driver, or an AMD/Intel-only host — it falls
-// back to ghw, which reports adapter names but no VRAM and no join key, so
-// those hosts list their GPUs without dynamic VRAM/utilization (matching the
-// pre-existing non-Windows behavior).
+// marketing name, total VRAM, and a stable per-GPU UUID reused as the join key
+// (statsKey) against the dynamic stats collector's snapshot.
 //
-// ghw enumerates display adapters, so it is a fallback for graphics cards
-// rather than a way to find a compute accelerator; a source that owns the
+// When no source identifies a graphics card it falls back to ghw, which reports
+// adapter names but no VRAM and no join key, so those hosts list their GPUs
+// without dynamic VRAM or utilization (matching the pre-existing non-Windows
+// behaviour). ghw enumerates display adapters, so it is a fallback for graphics
+// cards rather than a way to find a compute accelerator; a source that owns the
 // hardware belongs in the chain instead.
 //
 // On unified-memory architectures (UMA, e.g. Grace-Blackwell / DGX Spark)
-// nvidia-smi reports [N/A] for memory.total because the GPU shares system
-// DRAM; in that case VramBytes is filled from detectMemoryTotal() instead.
+// nvidia-smi reports [N/A] for memory.total because the GPU shares system DRAM;
+// in that case VramBytes is filled from detectMemoryTotal() instead.
 func detectGPUs() []GPUInfo {
-	devices, errs := accel.Detect(context.Background(), linuxAccelSources())
+	ctx, cancel := context.WithTimeout(context.Background(), detectGPUsTimeout)
+	defer cancel()
+
+	devices, errs := accel.Detect(ctx, linuxAccelSources())
 	for _, err := range errs {
 		// Debug, not warn: on a host with no NVIDIA driver this is the
 		// ordinary case, and the stats collector already warns once about
 		// the same missing binary. Two warnings for one absent tool is noise.
 		slog.Debug("accelerator detection source failed", "err", err)
-	}
-	if len(devices) == 0 {
-		return detectGPUsGHW()
 	}
 
 	gpus := make([]GPUInfo, 0, len(devices))
@@ -69,7 +77,47 @@ func detectGPUs() []GPUInfo {
 		})
 	}
 
+	// Fall back to display-adapter enumeration when no source identified a
+	// graphics card.
+	//
+	// The condition is "no GPU found", not "nothing found at all". A host can
+	// have a working accelerator and a graphics card whose driver is broken —
+	// a kernel upgrade outrunning an out-of-tree driver produces exactly that —
+	// and gating on an empty result let the accelerator hide the GPU entirely.
+	if !hasKind(gpus, accel.KindGPU) {
+		gpus = append(gpus, detectGPUsGHWContext(ctx)...)
+	}
 	return gpus
+}
+
+// hasKind reports whether any device is of the given kind.
+func hasKind(gpus []GPUInfo, kind string) bool {
+	for _, gpu := range gpus {
+		if gpu.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// detectGPUsGHWContext runs the ghw fallback under a deadline.
+//
+// ghw is a blocking library call with no context of its own, so the deadline is
+// enforced by abandoning it rather than cancelling it: on timeout this returns
+// nothing and leaves one goroutine parked until ghw returns. That leak is the
+// right trade here — it is bounded at one per process, and the alternative is a
+// service that never starts.
+func detectGPUsGHWContext(ctx context.Context) []GPUInfo {
+	result := make(chan []GPUInfo, 1)
+	go func() { result <- detectGPUsGHW() }()
+	select {
+	case gpus := <-result:
+		return gpus
+	case <-ctx.Done():
+		slog.Warn("display-adapter enumeration timed out; reporting without it",
+			"timeout", detectGPUsTimeout)
+		return nil
+	}
 }
 
 // linuxAccelSources is the detection chain, in reporting order. Qualcomm and
