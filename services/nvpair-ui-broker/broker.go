@@ -1839,7 +1839,7 @@ func (b *Broker) Serve(ctx context.Context) error {
 	// startup attempts have established either readiness or a terminal outcome.
 	// This prevents a restored engine from taking a persisted proxy port before
 	// the broker can resolve ownership.
-	go b.runEngineAvailabilityAfterPortGates(ctx, b.runAutoAdvertise, b.runAutoAdvertiseLMStudio)
+	go b.runEngineAvailabilityAfterPortGates(ctx, b.runAutoAdvertise, b.runAutoAdvertiseLMStudio, b.runAutoAdvertiseMax)
 
 	// nvpair-workload-manager is another auxiliary worker: it relays local
 	// workload lifecycle events to peer nodes and surfaces peer events
