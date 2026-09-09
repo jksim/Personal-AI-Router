@@ -1,0 +1,69 @@
+{
+  "engine": "max",
+  "display_name": "MAX",
+  "manifest_version": 1,
+  "platforms": {
+    "linux/amd64": {
+      "detect": ["{install_dir}/venv/bin/max"],
+      "install": {
+        "fetch": {
+          "url": "https://github.com/astral-sh/uv/releases/download/0.12.11/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "sha256": "4ae93e0f148a18434cc094072547cec88912fc4a72b984183c7d0d0e9586cb5e"
+        },
+        "run": [
+          "sh",
+          "-c",
+          "set -e; mkdir -p \"$0/uv\"; tar -xzf \"$1\" --strip-components=1 -C \"$0/uv\"; UV_CACHE_DIR=\"$0/cache\" UV_PYTHON_INSTALL_DIR=\"$0/python\" \"$0/uv/uv\" venv \"$0/venv\" --python 3.12; UV_CACHE_DIR=\"$0/cache\" UV_PYTHON_INSTALL_DIR=\"$0/python\" \"$0/uv/uv\" pip install --python \"$0/venv/bin/python\" \"max[serve]==26.5.0\"; rm -rf \"$0/cache\"",
+          "{install_dir}",
+          "{download}"
+        ],
+        "mode": "user"
+      },
+      "uninstall": {
+        "run": ["rm", "-rf", "{install_dir}"]
+      },
+      "runtime": {
+        "mode": "process",
+        "bin": "{install_dir}/venv/bin/max",
+        "args": ["serve", "--model", "{model}", "--port", "{port}"],
+        "env": {
+          "MAX_SERVE_HOST": "{host}",
+          "MAX_SERVE_DISABLE_TELEMETRY": "1",
+          "HF_HUB_DISABLE_TELEMETRY": "1"
+        },
+        "bind": "127.0.0.1",
+        "port": 8001,
+        "ready": {
+          "http": "http://127.0.0.1:{port}/health",
+          "status": 200,
+          "timeout_s": 600
+        },
+        "stop": { "signal": "term", "grace_s": 30 },
+        "health": {
+          "http": "http://127.0.0.1:{port}/health",
+          "status": 200,
+          "interval_s": 10
+        }
+      }
+    }
+  },
+  "actions": {
+    "list_models": {
+      "description": "List MAX models available on this system by enumerating the HuggingFace cache (models--<owner>--<name> directories that contain a snapshot).",
+      "cmd": [
+        "sh",
+        "-c",
+        "cd \"{models_dir}\" 2>/dev/null || exit 0; for d in models--*; do [ -d \"$d/snapshots\" ] || continue; ls \"$d/snapshots\" >/dev/null 2>&1 || continue; printf '%s\\n' \"$d\" | sed -e 's/^models--//' -e 's/--/\\//g'; done"
+      ]
+    },
+    "loaded_models": {
+      "description": "List the model MAX is currently serving. MAX serves one model per process, so this returns at most one entry.",
+      "http": { "method": "GET", "path": "/v1/models" },
+      "result": { "array": "data", "field": "id" }
+    },
+    "chat": {
+      "description": "OpenAI-compatible chat completion (params: {\"model\": \"<name>\", \"messages\": [...]}).",
+      "http": { "method": "POST", "path": "/v1/chat/completions", "body_schema": { "model": "string", "messages": "array" } }
+    }
+  }
+}
