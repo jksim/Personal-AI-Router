@@ -16,7 +16,19 @@ type modelActionRequest struct {
 }
 
 // ModelLoad warms a model into engine memory using each engine's manifest action.
+//
+// An engine that serves one model per process has no such action: loading is
+// relaunching. Those are routed to SetModel so the desktop's existing "load
+// this model" command works unchanged and callers need not know which kind of
+// engine they are talking to.
 func (e *Executor) ModelLoad(ctx context.Context, engine, model string) (json.RawMessage, error) {
+	if st, err := e.state(engine); err == nil && runtimeNeedsModel(st.plat.Runtime) {
+		status, err := e.SetModel(ctx, engine, model)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(status)
+	}
 	action, params, err := modelActionWire(engine, "load", model)
 	if err != nil {
 		return nil, err

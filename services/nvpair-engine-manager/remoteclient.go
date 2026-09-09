@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -49,7 +50,13 @@ func waitsForEngineReadiness(path, engine string) bool {
 	// controlDeletePath: LM Studio's delete_model declares restart_after, so the
 	// peer replies only after the post-delete restart is ready.
 	if path == controlLoadPath {
-		return engine == "ollama"
+		// Keyed off whether the engine's load path restarts it, not off a name.
+		// Ollama pulls-and-loads inside a running server; a one-model-per-process
+		// engine relaunches and recompiles. Both answer only once the engine is
+		// ready again, and naming engines here meant a new one was cut off at 30s
+		// mid-restart — leaving it stopped and reporting a failure that did not
+		// happen.
+		return engine == "ollama" || loadRestartsEngine(engine)
 	}
 	return path == controlStartPath || path == controlDeletePath
 }
@@ -203,3 +210,37 @@ func (c *remoteClient) stream(ctx context.Context, path string, body any, onProg
 	}
 	return result, nil
 }
+
+// loadRestartsEngine reports whether loading a model on this engine restarts
+// it, which is what makes a remote load outlive the ordinary header budget.
+//
+// It is derived from the bundled manifests rather than listed by name, because
+// a hand-kept list is exactly what cut a new engine off at 30 s: an engine
+// becomes model-configured by templating {model} in its launch args, and
+// nothing else should have to be told.
+func loadRestartsEngine(engine string) bool {
+	restartingLoadOnce.Do(func() {
+		restartingLoad = map[string]bool{}
+		reg := NewRegistry()
+		if err := reg.LoadFS(bundledManifests, "manifests"); err != nil {
+			return
+		}
+		for _, name := range reg.Names() {
+			m, ok := reg.Get(name)
+			if !ok {
+				continue
+			}
+			p, ok := m.HostPlatform()
+			if !ok {
+				continue
+			}
+			restartingLoad[name] = runtimeNeedsModel(p.Runtime)
+		}
+	})
+	return restartingLoad[engine]
+}
+
+var (
+	restartingLoadOnce sync.Once
+	restartingLoad     map[string]bool
+)

@@ -156,7 +156,7 @@ func (e *Executor) runRemovePathAction(ctx context.Context, st *engineState, act
 	}
 	vars := map[string]string{
 		"install_dir": st.installDir,
-		"models_dir":  lmstudioModelsDir(),
+		"models_dir":  engineModelsDir(st.manifest.Engine),
 	}
 	if len(params) > 0 {
 		var pm map[string]any
