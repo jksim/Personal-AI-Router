@@ -16,7 +16,7 @@ import (
 // broker needs. Its JSON tags match the producer's so node/discovered|
 // updated|removed payloads unmarshal straight into it (the GPU/CPU/memory
 // sub-objects reuse the broker's discovery types, whose tags are identical).
-// The ollama_* / lmstudio_* fields drive the per-engine manual→proxy bridge
+// The ollama_* / lmstudio_* / max_* fields drive the per-engine manual→proxy bridge
 // (bridgeManualNode); the rest project into the discovery store via
 // manualToEnriched.
 type manualNodeStatus struct {
@@ -28,6 +28,9 @@ type manualNodeStatus struct {
 	LMStudioUp     bool        `json:"lmstudio_up"`
 	LMStudioPort   int         `json:"lmstudio_port"`
 	LMStudioModels []string    `json:"lmstudio_models,omitempty"`
+	MaxUp          bool        `json:"max_up"`
+	MaxPort        int         `json:"max_port"`
+	MaxModels      []string    `json:"max_models,omitempty"`
 	NodeInfoPort   int         `json:"node_info_port"`
 	GPUs           []GPUInfo   `json:"gpus"`
 	CPU            *CPUInfo    `json:"cpu"`
@@ -87,7 +90,7 @@ func manualToEnriched(s manualNodeStatus) EnrichedNode {
 		GPUs:           s.GPUs,
 		CPU:            s.CPU,
 		Memory:         s.Memory,
-		Models:         mergeModels(s.OllamaModels, s.LMStudioModels),
+		Models:         mergeModels(s.OllamaModels, s.LMStudioModels, s.MaxModels),
 		ModelsByEngine: manualModelsByEngine(s),
 	}
 	if s.Address != "" {
@@ -98,7 +101,7 @@ func manualToEnriched(s manualNodeStatus) EnrichedNode {
 
 // manualModelsByEngine builds the per-engine attribution for a manual node from
 // the per-engine lists the prober already collected, keyed by the same
-// engine-manager engine names discovered nodes use ("ollama", "lmstudio") so the
+// engine-manager engine names discovered nodes use ("ollama", "lmstudio", "max") so the
 // two discovery sources present ModelsByEngine identically. An engine with no
 // models adds no key; returns nil when neither engine reports any.
 func manualModelsByEngine(s manualNodeStatus) map[string][]string {
@@ -108,6 +111,9 @@ func manualModelsByEngine(s manualNodeStatus) map[string][]string {
 	}
 	if len(s.LMStudioModels) > 0 {
 		byEngine["lmstudio"] = s.LMStudioModels
+	}
+	if len(s.MaxModels) > 0 {
+		byEngine["max"] = s.MaxModels
 	}
 	if len(byEngine) == 0 {
 		return nil
@@ -149,7 +155,8 @@ type proxyManualNode struct {
 
 // bridgeManualNode keeps every supervised proxy's manual-node set in step with
 // a manual node's per-engine reachability: a node whose Ollama is up is bridged
-// into ollama-proxy and one whose LM Studio is up into lmstudio-proxy
+// into ollama-proxy, one whose LM Studio is up into lmstudio-proxy, one whose
+// MAX is up into max-proxy
 // (idempotent — each proxy upserts on a repeat), while an engine that is not
 // (or no longer) reachable is removed from its proxy. Each leg is a no-op when
 // that proxy isn't supervised — the bridge only applies when the broker owns
@@ -162,6 +169,7 @@ type proxyManualNode struct {
 func (b *Broker) bridgeManualNode(s manualNodeStatus, key string) {
 	b.bridgeToProxy(b.getProxy(), "ollama", s, key, s.OllamaUp, s.OllamaPort, s.OllamaModels)
 	b.bridgeToProxy(b.getLMStudioProxy(), "lmstudio", s, key, s.LMStudioUp, s.LMStudioPort, s.LMStudioModels)
+	b.bridgeToProxy(b.getMaxProxy(), "max", s, key, s.MaxUp, s.MaxPort, s.MaxModels)
 }
 
 // bridgeToProxy adds the node to p when its engine is reachable, or removes it
@@ -196,6 +204,7 @@ func (b *Broker) bridgeToProxy(p *proxyProcess, engine string, s manualNodeStatu
 func (b *Broker) removeManualNodeFromProxies(id string) {
 	b.callProxyManual(b.getProxy(), "ollama", "node/remove-manual", map[string]string{"id": id}, id)
 	b.callProxyManual(b.getLMStudioProxy(), "lmstudio", "node/remove-manual", map[string]string{"id": id}, id)
+	b.callProxyManual(b.getMaxProxy(), "max", "node/remove-manual", map[string]string{"id": id}, id)
 }
 
 // callProxyManual issues a best-effort node/add-manual|remove-manual to a
