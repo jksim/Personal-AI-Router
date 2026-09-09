@@ -93,6 +93,7 @@ func TestReservedOllamaHostAliasPort(t *testing.T) {
 		port             int
 		lmstudioBackend  int
 		lmstudioProxy    int
+		maxProxy         int
 		wantReasonSubstr string
 	}{
 		{name: "free", port: 15555, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort},
@@ -108,13 +109,23 @@ func TestReservedOllamaHostAliasPort(t *testing.T) {
 		{name: "cluster manager", port: 14321, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort, wantReasonSubstr: "cluster manager"},
 		{name: "engine models", port: 14322, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort, wantReasonSubstr: "engine model"},
 		{name: "engine control", port: 14323, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort, wantReasonSubstr: "engine control"},
+		// The managed MAX facade is prepared after the alias for the same
+		// reason LM Studio's is, so both of its well-known ports are reserved
+		// before the backend moves.
+		{name: "managed max backend target", port: managedMaxBackendStart, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort, wantReasonSubstr: "managed MAX backend"},
+		{name: "max compatibility proxy", port: managedMaxFacadePort, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort, maxProxy: 8100, wantReasonSubstr: "MAX compatibility proxy"},
+		{name: "max proxy", port: 8100, lmstudioBackend: managedLMStudioBackendStart, lmstudioProxy: managedLMStudioFacadePort, maxProxy: 8100, wantReasonSubstr: "MAX proxy is configured"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			enginePorts := map[int]string{}
 			if tc.lmstudioBackend > 0 {
 				enginePorts[tc.lmstudioBackend] = "lmstudio"
 			}
-			reason := reservedOllamaHostAliasPort(tc.port, enginePorts, tc.lmstudioProxy)
+			maxProxy := tc.maxProxy
+			if maxProxy == 0 {
+				maxProxy = managedMaxFacadePort
+			}
+			reason := reservedOllamaHostAliasPort(tc.port, enginePorts, tc.lmstudioProxy, maxProxy)
 			if tc.wantReasonSubstr == "" && reason != "" {
 				t.Fatalf("reason = %q, want none", reason)
 			}

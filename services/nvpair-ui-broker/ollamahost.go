@@ -186,7 +186,7 @@ func (b *Broker) prepareOllamaHostAlias(enabled bool, backendPort int) {
 	if backendPort > 0 {
 		enginePorts[backendPort] = "ollama"
 	}
-	if reason := reservedOllamaHostAliasPort(alias.Port, enginePorts, configuredLMStudioProxyPort()); reason != "" {
+	if reason := reservedOllamaHostAliasPort(alias.Port, enginePorts, configuredLMStudioProxyPort(), configuredMaxProxyPort()); reason != "" {
 		b.reportOllamaHostAliasBlocked(alias.displayAddress(), reason)
 		return
 	}
@@ -344,7 +344,7 @@ func configuredLMStudioProxyPort() int {
 	return stored.Port
 }
 
-func reservedOllamaHostAliasPort(port int, enginePorts map[int]string, lmstudioProxy int) string {
+func reservedOllamaHostAliasPort(port int, enginePorts map[int]string, lmstudioProxy, maxProxy int) string {
 	if engine, ok := enginePorts[port]; ok {
 		if engine == "" {
 			engine = "an engine"
@@ -360,6 +360,14 @@ func reservedOllamaHostAliasPort(port int, enginePorts map[int]string, lmstudioP
 		// Managed LM Studio ownership is prepared after this check and moves a
 		// colliding backend here, so the alias must not be sitting on it.
 		return fmt.Sprintf("the managed LM Studio backend uses port %d", port)
+	case maxProxy:
+		return fmt.Sprintf("the MAX proxy is configured on port %d", port)
+	case managedMaxFacadePort:
+		return fmt.Sprintf("the MAX compatibility proxy uses port %d", port)
+	case managedMaxBackendStart:
+		// Managed MAX ownership is prepared after this check too, and moves a
+		// colliding backend here for the same reason.
+		return fmt.Sprintf("the managed MAX backend uses port %d", port)
 	case nodeInfoHTTPPort:
 		return fmt.Sprintf("the node-info service uses port %d", port)
 	case errorsHTTPPort:

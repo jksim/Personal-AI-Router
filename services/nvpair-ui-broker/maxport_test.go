@@ -6,9 +6,13 @@ package main
 import (
 	"encoding/json"
 	"net"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
+
+	"nvpair-shared/appdir"
 )
 
 func TestPlanManagedMaxPorts(t *testing.T) {
@@ -304,5 +308,41 @@ func TestPrepareMaxFacadeWithoutMaxEngineRunsUnmanaged(t *testing.T) {
 	}
 	if got := b.maxProxyStartupPort.Load(); got != 0 {
 		t.Fatalf("proxy startup port = %d, want the proxy's own default", got)
+	}
+}
+
+// TestConfiguredMaxProxyPort covers the persisted-port read the OLLAMA_HOST
+// alias consults before claiming a port. Missing or invalid state must fall back
+// to the default the proxy would itself choose, or the alias could claim a port
+// the proxy is about to bind.
+func TestConfiguredMaxProxyPort(t *testing.T) {
+	isolateOllamaHostTestConfig(t)
+	if got := configuredMaxProxyPort(); got != managedMaxFacadePort {
+		t.Fatalf("missing persisted port = %d, want default %d", got, managedMaxFacadePort)
+	}
+	path, err := appdir.Path(maxProxyPortFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{name: "persisted port", body: `{"port":8100}`, want: 8100},
+		{name: "out of range", body: `{"port":70000}`, want: managedMaxFacadePort},
+		{name: "unparseable", body: `not json`, want: managedMaxFacadePort},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if got := configuredMaxProxyPort(); got != tc.want {
+				t.Fatalf("configuredMaxProxyPort() = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }

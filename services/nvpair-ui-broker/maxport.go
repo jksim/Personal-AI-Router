@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 
+	"nvpair-shared/appdir"
 	"nvpair-shared/errors"
 )
 
@@ -514,4 +516,29 @@ func (b *Broker) handleMaxProxySetPort(msg *Message) {
 		return
 	}
 	b.relayToMaxProxy(msg)
+}
+
+// maxProxyPortFile mirrors lmstudioProxyPortFile: max-proxy's persisted-port
+// state, read here so the OLLAMA_HOST alias cannot win the bind race against a
+// proxy that is about to come back up on a port it chose earlier.
+const maxProxyPortFile = "max-proxy-port.json"
+
+// configuredMaxProxyPort mirrors configuredLMStudioProxyPort. Invalid or
+// missing state means the proxy will use its default.
+func configuredMaxProxyPort() int {
+	path, err := appdir.Path(maxProxyPortFile)
+	if err != nil {
+		return managedMaxFacadePort
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return managedMaxFacadePort
+	}
+	var stored struct {
+		Port int `json:"port"`
+	}
+	if json.Unmarshal(data, &stored) != nil || stored.Port < 1 || stored.Port > 65535 {
+		return managedMaxFacadePort
+	}
+	return stored.Port
 }
