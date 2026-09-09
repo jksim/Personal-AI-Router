@@ -139,7 +139,18 @@ func TestLiveQAICStatusDecode(t *testing.T) {
 		}
 	}
 	if decoded == 0 {
-		t.Fatal("no device could be decoded; check permissions on /dev/accel/* before anything else")
+		// Distinguish the two very different causes, because they send you
+		// to opposite ends of the machine:
+		//   EACCES  — the node is there and we may not open it: join the
+		//             group that owns /dev/accel/*.
+		//   ENODEV  — the node is there and the device behind it is not.
+		//             The driver bound but MHI never came up, which on this
+		//             hardware has meant PCIe link errors. Check
+		//             /sys/bus/pci/devices/<bdf>/aer_dev_correctable and
+		//             the kernel log before suspecting anything in here.
+		t.Fatal("no device could be decoded; see the per-device errors above — " +
+			"permission denied means a group problem, no-such-device means the " +
+			"hardware did not come up")
 	}
 }
 
