@@ -20,11 +20,13 @@ SPDX-License-Identifier: Apache-2.0
 > **Do not report issues with this fork to NVIDIA.** Use this repository's issue
 > tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
 >
-> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a
-> first-class engine, on the same footing as Ollama and LM Studio: PAIR
-> installs it, supervises it, lists and selects its models, and routes
-> inference to it across the cluster with the same model-aware routing,
-> failover and mTLS. Linux x86-64.
+> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a managed
+> engine alongside Ollama and LM Studio: PAIR installs it, supervises it, lists
+> and selects its models, and routes inference to it across the cluster with the
+> same model-aware routing, failover and mTLS. Linux x86-64.
+>
+> This is early — one engine, one platform, verified on one machine. The version
+> says 0.5 for that reason rather than as false modesty.
 >
 > Vendor-neutral accelerator support, and Qualcomm Cloud AI 100 via
 > [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic), are developed on a
