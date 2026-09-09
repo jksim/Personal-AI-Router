@@ -268,6 +268,7 @@ _No JSON-RPC methods detected (HTTP-only binary, or source not present)._
 - `method (var)  (clustermanager.go)`
 - `method (var)  (errors.go)`
 - `lmstudio-proxy:*  (lmstudioproxy.go)`
+- `max-proxy:*  (maxproxy.go)`
 - `method (var)  (proxy.go)`
 - `method (var)  (rpcworker.go, 2 sites)`
 

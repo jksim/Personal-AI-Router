@@ -42,6 +42,7 @@ This tree builds fourteen Go binaries. `nvpair-ui-broker` is the parent service 
 | `nvpair-ui-broker` | Parent service and JSON-RPC API surface used by the bundled UI and other clients. Supervises workers, relays consolidated discovery, and coordinates routing and scheduling. |
 | `ollama-proxy` | Ollama-compatible HTTP reverse proxy. Routes only to advertised model owners, with owner failover and scheduler priorities. |
 | `lmstudio-proxy` | LM Studio counterpart to `ollama-proxy`, forwarding OpenAI-compatible inference routes with equivalent owner-only routing and failover behavior. |
+| `max-proxy` | Modular MAX counterpart, built from the shared `openai-proxy` library rather than hand-forked. Same routing, failover, and cluster behavior; see [`max-proxy`](max-proxy/README.md). |
 | `nvpair-node-info` | Local HTTP service on `:14318` exposing GPU, CPU, and memory inventory at `/v1/node-info`. |
 | `nvpair-node-scanner` | Consolidated discovery daemon. Advertises and browses `_nvpair-node._tcp`, maintains the node directory, and enriches peers with hardware and model information over HTTP. |
 | `nvpair-manual-nodes` | Manages user-added nodes that don't appear via mDNS; probes them every 10 s. |
@@ -54,6 +55,8 @@ This tree builds fourteen Go binaries. `nvpair-ui-broker` is the parent service 
 | `nvpair-tui` | Terminal interface for headless and SSH operation; launches and supervises its own broker. |
 
 Shared code lives in the local `shared/` Go module (imported as `nvpair-shared/…`, replaced via `replace nvpair-shared => ../shared`). It provides logging, wire types, JSON-RPC and IPC, discovery records, mDNS, network monitoring, stable node identity, application data paths, and cluster trust helpers.
+
+The proxy body itself lives in a second local module, [`openai-proxy/`](openai-proxy/README.md), which ships no binary of its own: `max-proxy` is a profile literal and one call into it. `ollama-proxy` and `lmstudio-proxy` predate that library and remain standalone.
 
 The mDNS responder is our own rather than the host's, because Windows ships none. It sets `SO_REUSEADDR` so it shares UDP 5353 with sibling PAIR processes and with a system responder — `avahi-daemon` on Linux, Bonjour where present — needing no configuration on either platform.
 
