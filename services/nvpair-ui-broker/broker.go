@@ -153,6 +153,7 @@ type Broker struct {
 	nodeInfoPath      string
 	proxyPath         string
 	lmstudioProxyPath string
+	maxProxyPath      string
 	workloadMgrPath   string
 	errorsPath        string
 	engineMgrPath     string
@@ -330,6 +331,7 @@ type workerPaths struct {
 	nodeInfo      string
 	proxy         string
 	lmstudioProxy string
+	maxProxy      string
 	workloadMgr   string
 	errors        string
 	engineMgr     string

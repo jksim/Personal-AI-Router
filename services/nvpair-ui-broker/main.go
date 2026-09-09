@@ -26,6 +26,7 @@ func main() {
 	nodeInfoPath := flag.String("node-info-path", "", "path to nvpair-node-info binary (default: ./nvpair-node-info in the current working directory)")
 	proxyPath := flag.String("proxy-path", "", "path to ollama-proxy binary (default: ./ollama-proxy in the current working directory)")
 	lmstudioProxyPath := flag.String("lmstudio-proxy-path", "", "path to lmstudio-proxy binary (default: ./lmstudio-proxy in the current working directory)")
+	maxProxyPath := flag.String("max-proxy-path", "", "path to max-proxy binary (default: ./max-proxy in the current working directory)")
 	workloadMgrPath := flag.String("workload-manager-path", "", "path to nvpair-workload-manager binary (default: ./nvpair-workload-manager in the current working directory)")
 	errorsPath := flag.String("errors-path", "", "path to nvpair-errors binary (default: ./nvpair-errors in the current working directory)")
 	engineMgrPath := flag.String("engine-manager-path", "", "path to nvpair-engine-manager binary (default: ./nvpair-engine-manager in the current working directory)")
@@ -134,6 +135,18 @@ func main() {
 		}
 		slog.Warn("lmstudio-proxy binary not found; broker will run without local LM Studio proxy", "err", err)
 		resolvedLMStudioProxy = ""
+	}
+
+	// max-proxy follows the same rule: an explicit path that does not exist is
+	// an operator mistake and fatal, while an absent default sibling simply
+	// means this node fronts no local MAX engine.
+	resolvedMaxProxy, err := resolveMaxProxyPath(*maxProxyPath)
+	if err != nil {
+		if *maxProxyPath != "" {
+			fatalf("max-proxy binary: %v", err)
+		}
+		slog.Warn("max-proxy binary not found; broker will run without local MAX proxy", "err", err)
+		resolvedMaxProxy = ""
 	}
 
 	// nvpair-workload-manager is auxiliary too, resolved with the same rules:
@@ -253,6 +266,7 @@ func main() {
 		nodeInfo:      resolvedNodeInfo,
 		proxy:         resolvedProxy,
 		lmstudioProxy: resolvedLMStudioProxy,
+		maxProxy:      resolvedMaxProxy,
 		workloadMgr:   resolvedWorkloadMgr,
 		errors:        resolvedErrors,
 		engineMgr:     resolvedEngineMgr,
@@ -318,6 +332,13 @@ func resolveProxyPath(override string) (string, error) {
 // Studio proxy" rather than aborting the broker.
 func resolveLMStudioProxyPath(override string) (string, error) {
 	return resolveSiblingBinary(override, "lmstudio-proxy", "--lmstudio-proxy-path")
+}
+
+// resolveMaxProxyPath mirrors resolveLMStudioProxyPath for the max-proxy binary.
+// Its result is optional at the call site for the same reason: a not-found
+// default sibling degrades to "no local MAX proxy" rather than aborting.
+func resolveMaxProxyPath(override string) (string, error) {
+	return resolveSiblingBinary(override, "max-proxy", "--max-proxy-path")
 }
 
 // resolveWorkloadManagerPath mirrors resolveProxyPath for the
