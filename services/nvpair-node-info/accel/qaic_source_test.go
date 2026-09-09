@@ -31,8 +31,8 @@ func ultraFixture(t *testing.T) string {
 func ultraStatus(devicePath string) (qaicStatus, error) {
 	return qaicStatus{
 		BoardSerial: "ULTRA-0001",
-		DramTotalMB: 32768,
-		DramFreeMB:  32768,
+		DramTotalKB: 31391744,
+		DramFreeKB:  31391744,
 		NspTotal:    16,
 		NspFree:     16,
 		SkuName:     "PCIe Ultra",
@@ -55,7 +55,7 @@ func TestQAICSourceReportsOneCard(t *testing.T) {
 	if device.Name != "Qualcomm Cloud AI PCIe Ultra" {
 		t.Fatalf("name = %q", device.Name)
 	}
-	if want := uint64(131072) * 1024 * 1024; device.VramBytes != want {
+	if want := uint64(4*31391744) * 1024; device.VramBytes != want {
 		t.Fatalf("memory = %d bytes, want the summed %d", device.VramBytes, want)
 	}
 	if device.StatsKey != "qaic:serial:ULTRA-0001" {
@@ -116,7 +116,7 @@ func TestQAICSourceUnreadableDevicesStillReportHardware(t *testing.T) {
 func TestQAICSourceLoadReflectsBusyNSPs(t *testing.T) {
 	busy := func(string) (qaicStatus, error) {
 		return qaicStatus{
-			BoardSerial: "ULTRA-0001", DramTotalMB: 32768, DramFreeMB: 16384,
+			BoardSerial: "ULTRA-0001", DramTotalKB: 31391744, DramFreeKB: 15695872,
 			NspTotal: 16, NspFree: 8, SkuName: "PCIe Ultra",
 		}, nil
 	}

@@ -42,8 +42,8 @@ type qaicCard struct {
 	Grouped bool
 
 	// Summed resources across the members. Zero when no member answered.
-	DramTotalMB uint32
-	DramFreeMB  uint32
+	DramTotalKB uint64
+	DramFreeKB  uint64
 	NspTotal    int
 	NspFree     int
 }
@@ -147,8 +147,8 @@ func addSoC(card qaicCard, entry qaicSoCStatus) qaicCard {
 	if card.SkuName == "" {
 		card.SkuName = entry.Status.SkuName
 	}
-	card.DramTotalMB += entry.Status.DramTotalMB
-	card.DramFreeMB += entry.Status.DramFreeMB
+	card.DramTotalKB += uint64(entry.Status.DramTotalKB)
+	card.DramFreeKB += uint64(entry.Status.DramFreeKB)
 	card.NspTotal += int(entry.Status.NspTotal)
 	card.NspFree += int(entry.Status.NspFree)
 	return card

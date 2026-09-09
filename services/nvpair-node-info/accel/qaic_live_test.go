@@ -123,9 +123,9 @@ func TestLiveQAICStatusDecode(t *testing.T) {
 			continue
 		}
 		decoded++
-		t.Logf("%s: serial=%q sku=%q dram=%d/%d MB nsp=%d/%d load=%.3f",
+		t.Logf("%s: serial=%q sku=%q dram=%d/%d KB nsp=%d/%d load=%.3f",
 			soc.BDF, status.BoardSerial, status.SkuName,
-			status.DramFreeMB, status.DramTotalMB,
+			status.DramFreeKB, status.DramTotalKB,
 			status.NspFree, status.NspTotal, status.Load().Fraction)
 
 		if status.BoardSerial == "" {
@@ -134,7 +134,7 @@ func TestLiveQAICStatusDecode(t *testing.T) {
 		if status.NspTotal == 0 {
 			t.Errorf("%s: zero NSPs reported; the load signal is derived from this", soc.BDF)
 		}
-		if status.DramTotalMB == 0 {
+		if status.DramTotalKB == 0 {
 			t.Errorf("%s: zero total DRAM reported", soc.BDF)
 		}
 	}
