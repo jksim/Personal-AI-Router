@@ -350,7 +350,7 @@ func (e *Executor) watch(st *engineState, engine string, proc *managedProc) {
 		st.mu.Unlock()
 		if current && !stopping {
 			e.reporter.report(serviceError{
-				ID: exitedID(engine), Message: engine + " exited unexpectedly",
+				ID: exitedID(engine), Message: exitMessage(engine, st.logs),
 				Severity: "error", Action: "none", EngineType: engine,
 			})
 			e.emitState(engine)
@@ -901,6 +901,60 @@ func runtimeNeedsModel(rt Runtime) bool {
 	}
 	for _, s := range strs {
 		if strings.Contains(s, "{model}") {
+			return true
+		}
+	}
+	return false
+}
+
+// exitMessage explains an unexpected exit using the engine's own last words.
+//
+// "<engine> exited unexpectedly" on its own is unactionable: it is the same
+// sentence whether the model is unservable, a GPU library is missing, or the
+// machine ran out of memory. The engine has just said which — asking a model to
+// run that its weights cannot support prints "Missing required weights:
+// lm_head.weight" — and that line was being thrown away, leaving a user to guess.
+func exitMessage(engine string, logs *logBuffer) string {
+	base := engine + " exited unexpectedly"
+	if logs == nil {
+		return base
+	}
+	if reason := lastErrorLine(logs.snapshot()); reason != "" {
+		return base + ": " + reason
+	}
+	return base
+}
+
+// lastErrorLine picks the most useful line from an engine's captured output:
+// the final one that looks like a diagnosis. Engines print a traceback and then
+// a summary, so the last matching line is closer to the cause than the first.
+func lastErrorLine(lines []LogLine) string {
+	const maxReasonLen = 300
+	for i := len(lines) - 1; i >= 0; i-- {
+		text := strings.TrimSpace(lines[i].Text)
+		if text == "" || !looksLikeFailure(text) {
+			continue
+		}
+		if len(text) > maxReasonLen {
+			text = text[:maxReasonLen] + "…"
+		}
+		return text
+	}
+	return ""
+}
+
+// looksLikeFailure keeps the reason line recognisable without trying to parse
+// any particular engine's log format. A false positive costs a slightly odd
+// suffix; a false negative costs the user the only clue they had.
+//
+// "crashed" is deliberately absent. An engine tends to print its diagnosis and
+// then announce that it is crashing, so matching the announcement would replace
+// "Missing required weights: lm_head.weight" with "Worker crashed, shutting
+// down" — which tells the user only what PAIR has already told them.
+func looksLikeFailure(text string) bool {
+	lowered := strings.ToLower(text)
+	for _, marker := range []string{"error", "abort", "fatal", "exception", "failed", "traceback", "not supported", "missing required"} {
+		if strings.Contains(lowered, marker) {
 			return true
 		}
 	}

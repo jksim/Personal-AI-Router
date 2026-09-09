@@ -96,14 +96,26 @@ func (e *Executor) ModelsResult(ctx context.Context) ModelsResult {
 		if listSpec == nil && loadedSpec == nil {
 			continue
 		}
+		listWhileStopped := actionRunsWhileStopped(mf.Actions["list_models"])
 		wg.Add(1)
-		go func(i int, name string, listSpec, loadedSpec *ActionResult) {
+		go func(i int, name string, listSpec, loadedSpec *ActionResult, listWhileStopped bool) {
 			defer wg.Done()
 			st, err := e.Status(name)
-			if err != nil || !st.Running {
+			if err != nil {
 				return
 			}
-			if listSpec != nil {
+			// loaded_models asks what is resident in memory, so it always needs a
+			// running engine. An inventory does not: an engine whose list_models
+			// is a command reads its own on-disk store, which is there whether or
+			// not the server is up — and Action already allows exactly that.
+			//
+			// Gating both on Running made a stopped engine's models disappear
+			// from the model manager, which is where a user goes to pick what it
+			// should serve when they next start it.
+			if !st.Running && !listWhileStopped {
+				return
+			}
+			if listSpec != nil && (st.Running || listWhileStopped) {
 				if raw, err := e.Action(ctx, name, "list_models", nil); err != nil {
 					slog.Debug("engine:models list_models failed", "engine", name, "err", err)
 				} else if models, ok := extractStringsResult(raw, listSpec); ok {
@@ -113,7 +125,7 @@ func (e *Executor) ModelsResult(ctx context.Context) ModelsResult {
 					slog.Debug("engine:models list_models returned an invalid inventory", "engine", name)
 				}
 			}
-			if loadedSpec != nil {
+			if loadedSpec != nil && st.Running {
 				if raw, err := e.Action(ctx, name, "loaded_models", nil); err != nil {
 					slog.Debug("engine:models loaded_models failed", "engine", name, "err", err)
 				} else if models, ok := extractStringsResult(raw, loadedSpec); ok {
@@ -126,7 +138,7 @@ func (e *Executor) ModelsResult(ctx context.Context) ModelsResult {
 					slog.Debug("engine:models loaded_models returned an invalid inventory", "engine", name)
 				}
 			}
-		}(i, name, listSpec, loadedSpec)
+		}(i, name, listSpec, loadedSpec, listWhileStopped)
 	}
 	wg.Wait()
 
@@ -268,4 +280,13 @@ func extractLinesResult(raw json.RawMessage) ([]string, bool) {
 		}
 	}
 	return out, true
+}
+
+// actionRunsWhileStopped reports whether an action can run against a stopped
+// engine. It mirrors Action's own rule — a command or a path removal touches
+// the filesystem, an HTTP action needs the engine's loopback API — and exists so
+// the two cannot drift: an inventory sweep that skipped what Action would have
+// answered is how a stopped engine came to report no models at all.
+func actionRunsWhileStopped(act Action) bool {
+	return len(act.Cmd) > 0 || act.RemovePath != nil
 }
