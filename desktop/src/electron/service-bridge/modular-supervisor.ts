@@ -201,17 +201,36 @@ function normalizeLogLevel(value: string | undefined): ModularLogLevel {
 }
 
 /**
- * Shape the `pull_model` action params per engine. Ollama's `pull_model` body is
- * sent verbatim to `/api/pull` (reads `name`); LM Studio's CLI action templates
- * `{model}` into `lms get {model} --yes`. Sending the wrong key leaves the
- * placeholder unresolved and the engine-manager rejects the call.
+ * The param key an engine's model actions expect, keyed by engine-manager id.
+ *
+ * This follows the manifest, not preference: an engine whose action is an HTTP
+ * call takes the key its API reads (Ollama's `/api/pull` reads `name`), and an
+ * engine whose action is a command takes `model`, because that is the
+ * placeholder the command templates.
+ *
+ * It is a map rather than a ternary because it used to be one, with LM Studio as
+ * the only named case and `name` as the else. MAX then templated `{model}` and
+ * received `name`, so the repo id arrived empty and the download failed with
+ * "Repo id must use alphanumeric chars … : ''". A missing entry here is now a
+ * lookup that returns undefined and fails the test that derives this from the
+ * manifests, rather than a wrong key that fails in front of a user.
  */
+const MODEL_PARAM_KEY: Record<string, 'model' | 'name'> = {
+    ollama: 'name',
+    lmstudio: 'model',
+    max: 'model'
+}
+
+function modelParams(engineManagerEngine: string, model: string): JsonObject {
+    return MODEL_PARAM_KEY[engineManagerEngine] === 'model' ? { model } : { name: model }
+}
+
 function pullModelParams(engineManagerEngine: string, model: string): JsonObject {
-    return engineManagerEngine === 'lmstudio' ? { model } : { name: model }
+    return modelParams(engineManagerEngine, model)
 }
 
 function deleteModelParams(engineManagerEngine: string, model: string): JsonObject {
-    return engineManagerEngine === 'lmstudio' ? { model } : { name: model }
+    return modelParams(engineManagerEngine, model)
 }
 
 /**

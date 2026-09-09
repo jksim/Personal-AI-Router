@@ -47,7 +47,7 @@ describe('broker worker paths', () => {
 
     it('passes a path only for binaries that exist', () => {
         const passed = passedProcessNames()
-        const known = new Set(MODULAR_RUNTIME_BINARIES.map(b => b.processName))
+        const known = new Set<string>(MODULAR_RUNTIME_BINARIES.map(b => b.processName))
         for (const name of passed) {
             expect(known.has(name), `brokerStartupArgs passes unknown process "${name}"`).toBe(true)
         }
