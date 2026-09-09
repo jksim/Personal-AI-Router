@@ -541,3 +541,61 @@ func TestBuildResponseCPUMemoryMatrix(t *testing.T) {
 		})
 	}
 }
+
+// TestInferenceHardwareIDs pins which devices are advertised as able to run
+// inference. Getting this wrong is not cosmetic: the list drives whether a
+// consumer offers a device for work at all.
+func TestInferenceHardwareIDs(t *testing.T) {
+	cases := []struct {
+		name string
+		gpus []GPUInfo
+		want []string
+	}{
+		{
+			name: "a working gpu qualifies",
+			gpus: []GPUInfo{{Name: "NVIDIA RTX A4500", Kind: "gpu", DeviceID: "GPU-a4500", VramBytes: 21464350720}},
+			want: []string{"GPU-a4500"},
+		},
+		{
+			name: "a working accelerator qualifies",
+			gpus: []GPUInfo{{Name: "Cloud AI", Kind: "accelerator", DeviceID: "qaic:serial:U1", VramBytes: 1 << 37}},
+			want: []string{"qaic:serial:U1"},
+		},
+		{
+			// Observed on real hardware: the driver bound and the devices
+			// enumerated, but firmware never came up and every open returned
+			// ENODEV. They have ids and are not display adapters, so only the
+			// unknown capacity keeps them out.
+			name: "an accelerator that never came up does not qualify",
+			gpus: []GPUInfo{{Name: "Cloud AI", Kind: "accelerator", DeviceID: "qaic:pci:0000:cc:00.0"}},
+			want: nil,
+		},
+		{
+			name: "a display adapter never qualifies",
+			gpus: []GPUInfo{{Name: "Some adapter", Kind: "display", DeviceID: "x", VramBytes: 1 << 30}},
+			want: nil,
+		},
+		{
+			name: "a device with no stable id cannot be referenced",
+			gpus: []GPUInfo{{Name: "Anonymous", Kind: "gpu", VramBytes: 1 << 30}},
+			want: nil,
+		},
+		{
+			name: "mixed host reports only what works",
+			gpus: []GPUInfo{
+				{Name: "NVIDIA RTX A4500", Kind: "gpu", DeviceID: "GPU-a4500", VramBytes: 21464350720},
+				{Name: "Cloud AI", Kind: "accelerator", DeviceID: "qaic:pci:0000:cc:00.0"},
+				{Name: "Some adapter", Kind: "display", DeviceID: "d", VramBytes: 1 << 30},
+			},
+			want: []string{"GPU-a4500"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := inferenceHardwareIDs(c.gpus)
+			if !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("inferenceHardwareIDs() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

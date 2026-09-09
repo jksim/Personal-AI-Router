@@ -252,15 +252,24 @@ func telemetryStatus(sampledAt, now time.Time) (bool, int64) {
 
 // inferenceHardwareIDs selects the devices that can run inference.
 //
-// A device needs a stable id to be referenced at all, and must not be a
-// display adapter discovered by graphics enumeration — that path reports
-// adapters without establishing anything about their compute capability. On a
-// host where nothing qualifies the list is empty and therefore omitted, which
-// consumers read as "unknown" and fall open on.
+// Three things must hold. The device needs a stable id to be referenced at all.
+// It must not be a display adapter found by graphics enumeration, since that
+// path reports adapters without establishing anything about compute. And its
+// capacity must be known, which is the part that matters in practice: a device
+// we could not size is a device we could not talk to.
+//
+// That last condition is not pedantry. An accelerator whose driver bound but
+// whose firmware never came up still enumerates on the PCI bus and still has a
+// stable id, so the first two tests pass for hardware that demonstrably cannot
+// run anything — observed on a card with failing PCIe links, which advertised
+// four ready accelerators while every attempt to open one returned ENODEV.
+//
+// On a host where nothing qualifies the list is empty and therefore omitted,
+// which consumers read as "unknown" and fall open on.
 func inferenceHardwareIDs(gpus []GPUInfo) []string {
 	var ids []string
 	for _, gpu := range gpus {
-		if gpu.DeviceID == "" || gpu.Kind == accel.KindDisplay {
+		if gpu.DeviceID == "" || gpu.Kind == accel.KindDisplay || gpu.VramBytes == 0 {
 			continue
 		}
 		ids = append(ids, gpu.DeviceID)

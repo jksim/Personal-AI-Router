@@ -12,6 +12,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"nvpair-node-info/accel"
 )
 
 // TestNvidiaSmiCSVBuildsQueryArgs pins the exact argv the CSV helper hands the
@@ -134,5 +136,54 @@ func TestNvidiaSmiCSVHonorsParentCancellation(t *testing.T) {
 	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context canceled", err)
+	}
+}
+
+// TestHasKind pins the predicate behind the display-adapter fallback.
+//
+// The fallback must trigger when no GPU was identified even though other
+// hardware was — a host with a working accelerator and a graphics card whose
+// driver is broken. Gating on "nothing found at all" let the accelerator hide
+// the GPU, which is exactly what happened on this host when a kernel upgrade
+// outran the NVIDIA module: the card was on the bus and vanished from the API.
+func TestHasKind(t *testing.T) {
+	cases := []struct {
+		name string
+		gpus []GPUInfo
+		want bool
+	}{
+		{name: "nothing found", gpus: nil, want: false},
+		{
+			name: "accelerator only still needs the display fallback",
+			gpus: []GPUInfo{{Name: "Cloud AI", Kind: "accelerator"}},
+			want: false,
+		},
+		{
+			name: "a gpu was identified",
+			gpus: []GPUInfo{{Name: "NVIDIA RTX A4500", Kind: "gpu"}},
+			want: true,
+		},
+		{
+			name: "accelerator alongside a gpu",
+			gpus: []GPUInfo{
+				{Name: "Cloud AI", Kind: "accelerator"},
+				{Name: "NVIDIA RTX A4500", Kind: "gpu"},
+			},
+			want: true,
+		},
+		{
+			// A previous ghw result must not satisfy the predicate, or a
+			// second call would skip the fallback it just populated.
+			name: "a display adapter does not count as a gpu",
+			gpus: []GPUInfo{{Name: "Some adapter", Kind: "display"}},
+			want: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := hasKind(c.gpus, accel.KindGPU); got != c.want {
+				t.Fatalf("hasKind(gpu) = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
