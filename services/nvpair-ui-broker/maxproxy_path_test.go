@@ -50,3 +50,66 @@ func TestResolveMaxProxyPath(t *testing.T) {
 		t.Fatalf("error %q does not mention the override flag", err)
 	}
 }
+
+// TestNewBrokerCarriesEveryWorkerPath pins that every resolved worker path
+// reaches the broker field the supervisor reads.
+//
+// The resolver and the supervisor can both be correct while nothing connects
+// them: max-proxy shipped for one commit with a flag, a resolver, a workerPaths
+// entry and a startup block, and no assignment between the struct and the
+// field. Everything compiled, the resolver test passed, and the broker logged
+// "path not resolved" for a binary it had just been handed. Asserting the whole
+// struct rather than one field is what makes that class of gap visible.
+func TestNewBrokerCarriesEveryWorkerPath(t *testing.T) {
+	paths := workerPaths{
+		scanner:       "scanner-bin",
+		nodeInfo:      "node-info-bin",
+		proxy:         "proxy-bin",
+		lmstudioProxy: "lmstudio-proxy-bin",
+		maxProxy:      "max-proxy-bin",
+		workloadMgr:   "workload-manager-bin",
+		errors:        "errors-bin",
+		engineMgr:     "engine-manager-bin",
+		manualNodes:   "manual-nodes-bin",
+		settings:      "settings-bin",
+		clusterMgr:    "cluster-manager-bin",
+		scheduler:     "scheduler-bin",
+		clusterDir:    "cluster-dir",
+	}
+	b := NewBroker(nil, paths)
+	got := map[string]string{
+		"scanner":          b.scannerPath,
+		"node-info":        b.nodeInfoPath,
+		"proxy":            b.proxyPath,
+		"lmstudio-proxy":   b.lmstudioProxyPath,
+		"max-proxy":        b.maxProxyPath,
+		"workload-manager": b.workloadMgrPath,
+		"errors":           b.errorsPath,
+		"engine-manager":   b.engineMgrPath,
+		"manual-nodes":     b.manualNodesPath,
+		"settings":         b.settingsPath,
+		"cluster-manager":  b.clusterMgrPath,
+		"scheduler":        b.schedulerPath,
+		"cluster-dir":      b.clusterDir,
+	}
+	want := map[string]string{
+		"scanner":          paths.scanner,
+		"node-info":        paths.nodeInfo,
+		"proxy":            paths.proxy,
+		"lmstudio-proxy":   paths.lmstudioProxy,
+		"max-proxy":        paths.maxProxy,
+		"workload-manager": paths.workloadMgr,
+		"errors":           paths.errors,
+		"engine-manager":   paths.engineMgr,
+		"manual-nodes":     paths.manualNodes,
+		"settings":         paths.settings,
+		"cluster-manager":  paths.clusterMgr,
+		"scheduler":        paths.scheduler,
+		"cluster-dir":      paths.clusterDir,
+	}
+	for name, wantPath := range want {
+		if got[name] != wantPath {
+			t.Errorf("%s path = %q, want %q", name, got[name], wantPath)
+		}
+	}
+}

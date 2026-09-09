@@ -387,6 +387,7 @@ func NewBroker(codec *Codec, paths workerPaths) *Broker {
 		nodeInfoPath:       paths.nodeInfo,
 		proxyPath:          paths.proxy,
 		lmstudioProxyPath:  paths.lmstudioProxy,
+		maxProxyPath:       paths.maxProxy,
 		workloadMgrPath:    paths.workloadMgr,
 		errorsPath:         paths.errors,
 		engineMgrPath:      paths.engineMgr,
@@ -524,16 +525,25 @@ func (b *Broker) restoreEnabledEnginesAfterPortGate(ctx context.Context) bool {
 	return true
 }
 
+// runEngineAvailabilityAfterPortGates is variadic because the number of engine
+// advertisers is no longer fixed at two. The last one runs on the caller's
+// goroutine, as the LM Studio advertiser did when the arity was hardcoded, so
+// this still owns the caller's goroutine for the life of advertising.
 func (b *Broker) runEngineAvailabilityAfterPortGates(
 	ctx context.Context,
-	runOllama func(context.Context),
-	runLMStudio func(context.Context),
+	runAdvertisers ...func(context.Context),
 ) bool {
 	if !b.restoreEnabledEnginesAfterPortGate(ctx) {
 		return false
 	}
-	go runOllama(ctx)
-	runLMStudio(ctx)
+	if len(runAdvertisers) == 0 {
+		return true
+	}
+	last := len(runAdvertisers) - 1
+	for _, run := range runAdvertisers[:last] {
+		go run(ctx)
+	}
+	runAdvertisers[last](ctx)
 	return true
 }
 
@@ -818,6 +828,7 @@ func (b *Broker) spawnEngineMgr() (supervisedHandle, error) {
 	// adopt or start a backend on the port the proxy alias owns.
 	b.syncCurrentEngineOllamaHostAliasReservation()
 	b.reconcileLMStudioProxyAfterEngineManagerReady()
+	b.reconcileMaxProxyAfterEngineManagerReady()
 	// Initial restore waits for both managed compatibility ports below. A later
 	// engine-manager respawn sees the already-open gates and restores here.
 	if b.managedPortOwnershipReady() {
@@ -1168,6 +1179,7 @@ func (b *Broker) forwardEngineNotification(method string, params json.RawMessage
 	}
 	if method == "engine:ready" {
 		b.reconcileLMStudioProxyAfterEngineManagerReady()
+		b.reconcileMaxProxyAfterEngineManagerReady()
 	}
 	if method == noderec.MethodSubscribe {
 		// engine-manager subscribes upward for its ec peer set (nodes exposing
@@ -1716,6 +1728,7 @@ func (b *Broker) Serve(ctx context.Context) error {
 	}
 	b.prepareManagedOllamaFacade()
 	b.prepareManagedLMStudioFacade()
+	b.prepareManagedMaxFacade()
 
 	// node-info is an auxiliary worker: spawning it lets the broker's own
 	// host advertise its hardware inventory on the network, but it is NOT
@@ -1792,6 +1805,32 @@ func (b *Broker) Serve(ctx context.Context) error {
 			_, _ = b.blockManagedLMStudioFacade("the LM Studio proxy is unavailable", nil)
 		}
 		b.finishLMStudioProxyTerminal()
+	}
+
+	// max-proxy fronts a Modular MAX engine and is supervised exactly like the
+	// LM Studio proxy: non-fatal, port learned from its "ready" notification,
+	// control plane relayed under max-proxy:. Either outcome — readiness or a
+	// terminal failure — must be reached, because the engine-availability gate
+	// below now waits on all three proxies.
+	if b.maxProxyPath != "" {
+		b.maxProxySup = newSupervisor("max-proxy", defaultRestartPolicy(), b.spawnMaxProxy)
+		b.configureMaxProxySupervisorCallbacks(b.maxProxySup)
+		if err := b.maxProxySup.Start(); err != nil {
+			slog.Warn("max-proxy failed to start; continuing without local MAX proxy", "path", b.maxProxyPath, "err", err)
+			b.maxProxySup = nil
+			if b.managedMaxFacade.Load() {
+				_, _ = b.blockManagedMaxFacade("the MAX proxy could not be started", nil)
+			}
+			b.finishMaxProxyTerminal()
+		} else {
+			defer b.maxProxySup.Stop()
+		}
+	} else {
+		slog.Info("max-proxy path not resolved; running without local MAX proxy")
+		if b.managedMaxFacade.Load() {
+			_, _ = b.blockManagedMaxFacade("the MAX proxy is unavailable", nil)
+		}
+		b.finishMaxProxyTerminal()
 	}
 
 	// Restore engines and begin both advertising loops only after both proxy
@@ -1875,6 +1914,10 @@ func (b *Broker) shutdownInferenceStack() {
 	// Stop ingress first so no new inference can arrive while engine-manager is
 	// draining engines. supervisor.Stop uses each proxy's stdin-close/join path;
 	// it never adds a parent-side kill timeout.
+	if b.maxProxySup != nil {
+		b.maxProxySup.Stop()
+		b.setMaxProxy(nil)
+	}
 	if b.lmstudioProxySup != nil {
 		b.lmstudioProxySup.Stop()
 		b.setLMStudioProxy(nil)
@@ -2258,6 +2301,11 @@ func (b *Broker) forwardLogLevel(level string) {
 	if p := b.getLMStudioProxy(); p != nil {
 		if err := p.SetLogLevel(level); err != nil {
 			slog.Warn("failed to forward log/set-level to lmstudio-proxy", "err", err)
+		}
+	}
+	if p := b.getMaxProxy(); p != nil {
+		if err := p.SetLogLevel(level); err != nil {
+			slog.Warn("failed to forward log/set-level to max-proxy", "err", err)
 		}
 	}
 	if wm := b.getWorkloadMgr(); wm != nil {

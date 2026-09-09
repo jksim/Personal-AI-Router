@@ -53,7 +53,7 @@ func (b *Broker) markLMStudioPortReady() {
 }
 
 func (b *Broker) waitForManagedPortOwnership(ctx context.Context) bool {
-	for _, ready := range []<-chan struct{}{b.ollamaPortReady, b.lmstudioPortReady} {
+	for _, ready := range []<-chan struct{}{b.ollamaPortReady, b.lmstudioPortReady, b.maxPortReady} {
 		select {
 		case <-ctx.Done():
 			return false
@@ -64,7 +64,7 @@ func (b *Broker) waitForManagedPortOwnership(ctx context.Context) bool {
 }
 
 func (b *Broker) managedPortOwnershipReady() bool {
-	for _, ready := range []<-chan struct{}{b.ollamaPortReady, b.lmstudioPortReady} {
+	for _, ready := range []<-chan struct{}{b.ollamaPortReady, b.lmstudioPortReady, b.maxPortReady} {
 		select {
 		case <-ready:
 		default:

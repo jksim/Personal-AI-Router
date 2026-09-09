@@ -982,8 +982,12 @@ func TestEngineManagerRespawnReconcilesUnknownCustomBackendBeforeRestore(t *test
 	b := &Broker{
 		ollamaPortReady:   make(chan struct{}),
 		lmstudioPortReady: make(chan struct{}),
+		maxPortReady:      make(chan struct{}),
 	}
 	close(b.ollamaPortReady)
+	// Only LM Studio's gate is under test here; the other two are pre-opened so
+	// the shared restore gate turns solely on the one this test drives.
+	close(b.maxPortReady)
 	b.setLMStudioProxy(proxy)
 	b.setEngineMgr(oldEngine)
 
