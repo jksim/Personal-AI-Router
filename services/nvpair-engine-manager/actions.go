@@ -26,6 +26,18 @@ func (e *Executor) Action(ctx context.Context, engine, action string, params jso
 	if err != nil {
 		return nil, err
 	}
+	// An engine that picks its model at launch has no load_model action and
+	// cannot have one: loading is relaunching. Route it here, at the single
+	// point every caller converges on, so both the desktop's engine:action and
+	// a peer's remote load work without either knowing which kind of engine
+	// they are addressing.
+	if action == "load_model" && runtimeNeedsModel(st.plat.Runtime) {
+		status, err := e.SetModel(ctx, engine, modelParam(params))
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(status)
+	}
 	act, ok := st.manifest.Actions[action]
 	if !ok {
 		return nil, fmt.Errorf("engine %q has no action %q", engine, action)
@@ -347,4 +359,19 @@ func (e *Executor) runWithResume(ctx context.Context, argv []string) (string, er
 		case <-time.After(lmsGetResumeBackoff):
 		}
 	}
+}
+
+// modelParam pulls the model out of an action's params. An absent or malformed
+// value yields "", which SetModel rejects with a message naming the problem.
+func modelParam(params json.RawMessage) string {
+	if len(params) == 0 {
+		return ""
+	}
+	var p struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(params, &p) != nil {
+		return ""
+	}
+	return p.Model
 }

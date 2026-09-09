@@ -20,10 +20,11 @@ SPDX-License-Identifier: Apache-2.0
 > **Do not report issues with this fork to NVIDIA.** Use this repository's issue
 > tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
 >
-> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a routable
-> inference engine: a MAX server on any node in the cluster is discovered,
-> scheduled, and served through the same model-aware routing, failover, and
-> cluster mTLS that Ollama and LM Studio already get.
+> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a
+> first-class engine, on the same footing as Ollama and LM Studio: PAIR
+> installs it, supervises it, lists and selects its models, and routes
+> inference to it across the cluster with the same model-aware routing,
+> failover and mTLS. Linux x86-64.
 >
 > Vendor-neutral accelerator support, and Qualcomm Cloud AI 100 via
 > [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic), are developed on a
@@ -62,7 +63,7 @@ one, and both report live GPU and memory use throughout.
 | **Architectures** | x64 and arm64 on all three. Windows on ARM is experimental. |
 | **Installers** | Windows `.exe`; Linux `.deb`; macOS `.dmg`. On other Linux distributions, [build from source](docs/building.mdx). |
 | **Mixing nodes** | Windows, Linux, and macOS nodes can all be paired with each other |
-| **Inference engines** | Ollama and LM Studio, installed and managed by PAIR. Modular MAX is routed to but not yet installed by PAIR: point a MAX server at this machine and its models are discovered, scheduled, and served across the cluster like any other engine's. |
+| **Inference engines** | Ollama, LM Studio, and Modular MAX — all installed and managed by PAIR. MAX is Linux x86-64 only (it needs AVX2 and glibc 2.34+), and PAIR installs it into its own self-contained environment rather than changing your system Python. |
 
 **PAIR running on a machine does not mean an engine will.** PAIR itself runs on
 any supported Windows, Linux, or macOS machine. Each engine sets its own requirements

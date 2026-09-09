@@ -150,3 +150,35 @@ func TestValidModelRef(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadModelActionSelectsTheLaunchModel pins the route the desktop actually
+// takes. The UI sends engine:action{load_model} for every engine that is not
+// Ollama; MAX has no such action and cannot have one, so without this the
+// model picker fails with "engine has no action load_model".
+func TestLoadModelActionSelectsTheLaunchModel(t *testing.T) {
+	ex := modelEngineFixture(t, "max")
+	out, err := ex.Action(context.Background(), "max", "load_model",
+		json.RawMessage(`{"model":"modularai/Llama-3.1-8B"}`))
+	if err != nil {
+		t.Fatalf("load_model: %v", err)
+	}
+	if !strings.Contains(string(out), `"engine":"max"`) {
+		t.Fatalf("load_model result = %s, want an engine status", out)
+	}
+	st, err := ex.state("max")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.plat.Runtime.Model; got != "modularai/Llama-3.1-8B" {
+		t.Fatalf("selected model = %q, want the one load_model named", got)
+	}
+}
+
+// TestLoadModelActionRejectsAnEmptyModel keeps a missing param from silently
+// selecting nothing and leaving the engine unstartable.
+func TestLoadModelActionRejectsAnEmptyModel(t *testing.T) {
+	ex := modelEngineFixture(t, "max")
+	if _, err := ex.Action(context.Background(), "max", "load_model", nil); err == nil {
+		t.Fatal("load_model with no params succeeded, want a rejection")
+	}
+}
