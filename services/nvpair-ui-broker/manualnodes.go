@@ -215,6 +215,16 @@ func (b *Broker) removeManualNodeFromProxies(id string) {
 // these control-plane calls locally in well under proxyCallTimeout, and
 // manual-node events are infrequent (one per 10s probe), so the brief inline
 // call keeps add/remove strictly ordered without a queue.
+//
+// With three proxies each node event now fans out three of these calls, one
+// after another, and the reader goroutine is blocked for all of them. That is
+// still the right trade: the worst case is bounded by proxyCallTimeout per leg
+// against a local process, the probe interval is twenty times a healthy leg's
+// cost, and ordering is what makes the bridge correct — an add and a remove for
+// the same node must not overtake each other. Parallelising the legs would buy
+// latency the prober does not need and cost the ordering guarantee it does. If
+// a future engine's proxy can be slow to answer a control-plane call, give that
+// leg its own queue rather than making all of them concurrent.
 func (b *Broker) callProxyManual(p *proxyProcess, engine, method string, params any, id string) {
 	if p == nil {
 		return

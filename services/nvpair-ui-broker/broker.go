@@ -3135,6 +3135,28 @@ func (b *Broker) relayToProxy(msg *Message) {
 // and report progress via push events, so the broker waits for the real
 // response asynchronously rather than fabricating a timeout — meanwhile
 // other client requests keep being served on the read-loop goroutine.
+// relayToEngine gates engine traffic behind each engine's port-ownership
+// resolution before forwarding it to engine-manager.
+//
+// The gates are checked in sequence and this function re-enters itself after
+// each one opens, so a reader might expect the cost to be the number of engines
+// times rpcWorkerCallTimeout. It is not, for two reasons worth stating rather
+// than leaving to be rediscovered at the next engine:
+//
+//   - The gates open concurrently, not in sequence. Each is driven by its own
+//     proxy reaching readiness, and all three proxies are started together, so
+//     by the time the first gate releases a request the others are normally
+//     already open and cost nothing.
+//   - A gate that times out answers the client with an error instead of
+//     recursing, so the timeouts cannot chain. The pathological case is a gate
+//     that opens just under its deadline, which stacks one further wait per
+//     engine; every gate also has a terminal path (supervisor exhaustion opens
+//     it), so none can hang indefinitely.
+//
+// engine:get-installed is the method that gates on every engine at once. If a
+// fourth engine ever makes the stacked case real in practice, the fix is to wait
+// on the gates concurrently — not to drop the gate, which exists because a probe
+// arriving mid-transition can adopt a proxy as its own engine.
 func (b *Broker) relayToEngine(msg *Message) {
 	if needsOllamaPortGate(msg.Method, msg.Params) && b.ollamaFacadeIsPendingBackend() {
 		go func() {

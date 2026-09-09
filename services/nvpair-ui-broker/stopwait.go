@@ -39,7 +39,7 @@ const (
 
 	// teardownBudget bounds everything the broker does between being told to shut
 	// down and its last worker join. The joins run one after another, so
-	// per-worker graces alone add up: a tree where each of the eleven workers
+	// per-worker graces alone add up: a tree where each of the twelve workers
 	// hangs for its own grace outlives the parent's shutdown grace several times
 	// over, and being killed from outside mid-teardown skips the rest of shutdown.
 	//
@@ -49,10 +49,20 @@ const (
 	//	workload history shutdown flush    <= workloadHistoryFlushJoinTimeout (5s)
 	//
 	// which is the 15s the desktop parent and nvpair-tui both allow. Everything
-	// inside the first line — the two proxy joins, the engine StopAll wait, and
-	// all eleven joins — draws on this one budget, so no step can be lengthened
+	// inside the first line — the three proxy joins, the engine StopAll wait, and
+	// all twelve joins — draws on this one budget, so no step can be lengthened
 	// without the others giving way. It must also exceed the largest single worker
 	// grace, or that worker could never be granted it.
+	//
+	// Adding a proxy adds a join to that sequence, and the budget deliberately did
+	// not grow with it. The parent's 15s is fixed by the desktop and TUI hosts, so
+	// a larger budget here would come out of the history flush rather than out of
+	// nowhere. In exchange, minWorkerGrace guarantees every worker a floor even
+	// once the budget is spent, so a late join is signalled rather than starved,
+	// and a proxy is a clean-exiting worker whose join is normally milliseconds.
+	// The engine drain, which is the genuinely slow step, still runs first and is
+	// unaffected. An engine whose proxy cannot exit promptly is the case that
+	// would force this open.
 	teardownBudget = 10 * time.Second
 
 	// minWorkerGrace is the floor every worker keeps even once the budget is
