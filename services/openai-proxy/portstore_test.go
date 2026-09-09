@@ -45,10 +45,10 @@ func freeTCPPort(t *testing.T) int {
 func TestPortFileIsPerEngine(t *testing.T) {
 	max := testProfile()
 	max.PortFile = "max-proxy-port.json"
-	qaic := testProfile()
-	qaic.PortFile = "qaic-proxy-port.json"
+	other := testProfile()
+	other.PortFile = "other-proxy-port.json"
 
-	if max.PortFile == qaic.PortFile {
+	if max.PortFile == other.PortFile {
 		t.Fatal("two engines share a port file")
 	}
 }

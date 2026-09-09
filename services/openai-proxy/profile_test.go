@@ -12,7 +12,7 @@ import (
 
 // testProfile is the engine identity the package's own tests run against. It is
 // deliberately not any shipped engine's profile: a test that passes only for
-// MAX's port or Qualcomm's service key would be testing the profile rather than
+// MAX's port or another engine's service key would be testing the profile rather than
 // the proxy.
 func testProfile() Profile {
 	return Profile{
@@ -84,11 +84,11 @@ func TestProfileValidateRejectsIncompleteProfiles(t *testing.T) {
 func TestProfileErrorIDIsPerEngine(t *testing.T) {
 	max := testProfile()
 	max.ErrorIDPrefix = "max-proxy"
-	qaic := testProfile()
-	qaic.ErrorIDPrefix = "qaic-proxy"
+	other := testProfile()
+	other.ErrorIDPrefix = "other-proxy"
 
 	const node = "node-a"
-	if max.upstreamUnreachableID(node) == qaic.upstreamUnreachableID(node) {
+	if max.upstreamUnreachableID(node) == other.upstreamUnreachableID(node) {
 		t.Fatal("two engines produced the same sticky error id for one node")
 	}
 	if got := max.upstreamUnreachableID(node); got != "max-proxy:upstream-unreachable:node-a" {

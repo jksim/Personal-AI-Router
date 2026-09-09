@@ -20,12 +20,14 @@ SPDX-License-Identifier: Apache-2.0
 > **Do not report issues with this fork to NVIDIA.** Use this repository's issue
 > tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
 >
-> **What this fork adds.** Support for additional inference engines —
-> [Modular MAX](https://www.modular.com/) and Qualcomm Cloud AI 100 via
-> [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic) — and a vendor-neutral
-> accelerator layer so non-NVIDIA hardware is detected, described and scheduled
-> honestly. This work is in progress; see the commit history for what has
-> actually landed.
+> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a routable
+> inference engine: a MAX server on any node in the cluster is discovered,
+> scheduled, and served through the same model-aware routing, failover, and
+> cluster mTLS that Ollama and LM Studio already get.
+>
+> Vendor-neutral accelerator support, and Qualcomm Cloud AI 100 via
+> [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic), are developed on a
+> separate branch and are not part of this release line.
 >
 > Upstream code remains under its original copyright and the Apache-2.0 licence.
 > Files first written in this fork carry the fork author's copyright.
