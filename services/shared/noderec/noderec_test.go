@@ -245,3 +245,77 @@ func TestValidateTXTSize(t *testing.T) {
 		t.Error("oversized TXT entry not flagged")
 	}
 }
+
+// TestServiceMaxRoundTrip pins the MAX engine's service key end to end: it
+// survives TXT encode/decode alongside the existing engines, takes the plain
+// transport that local inference engines use, and appears in the deterministic
+// emit order.
+//
+// The key is two characters like every other, which matters: TXT entries are
+// bounded per string (RFC 6763 §6.1) and every advertised service spends part
+// of that budget.
+func TestServiceMaxRoundTrip(t *testing.T) {
+	rec := NodeRecord{
+		HostUUID: "11111111-1111-1111-1111-111111111111",
+		IP:       "10.0.0.9",
+		Services: map[ServiceKey]int{
+			ServiceNodeInfo: 14318,
+			ServiceOllama:   11434,
+			ServiceLMStudio: 1234,
+			ServiceMax:      8000,
+		},
+	}
+
+	txt := rec.TXT()
+	if err := ValidateTXTSize(txt); err != nil {
+		t.Fatalf("adding the MAX key broke the TXT budget: %v", err)
+	}
+
+	back := ParseTXT(txt)
+	port, ok := back.Port(ServiceMax)
+	if !ok {
+		t.Fatal("MAX service key did not survive the TXT round trip")
+	}
+	if port != 8000 {
+		t.Fatalf("MAX port = %d, want 8000", port)
+	}
+
+	// The existing engines must be unaffected by the new key.
+	if p, ok := back.Port(ServiceOllama); !ok || p != 11434 {
+		t.Fatalf("ollama port = %d ok=%v", p, ok)
+	}
+	if p, ok := back.Port(ServiceLMStudio); !ok || p != 1234 {
+		t.Fatalf("lmstudio port = %d ok=%v", p, ok)
+	}
+
+	// Local inference engines are dialled plain even on a clustered node.
+	if got := ServiceMax.Transport(); got != TransportPlain {
+		t.Fatalf("ServiceMax.Transport() = %v, want TransportPlain", got)
+	}
+}
+
+// TestServiceKeyOrderCoversEveryKey keeps the emit order exhaustive. A key
+// missing from serviceKeyOrder is still parsed on the way in but never
+// advertised on the way out, so the service silently fails to be discovered.
+func TestServiceKeyOrderCoversEveryKey(t *testing.T) {
+	all := []ServiceKey{
+		ServiceNodeInfo, ServiceOllama, ServiceLMStudio, ServiceMax,
+		ServiceErrors, ServiceWorkload, ServiceCluster,
+		ServiceEngineManager, ServiceEngineControl,
+	}
+	inOrder := map[ServiceKey]bool{}
+	for _, key := range serviceKeyOrder {
+		if inOrder[key] {
+			t.Fatalf("serviceKeyOrder lists %q twice", key)
+		}
+		inOrder[key] = true
+	}
+	for _, key := range all {
+		if !inOrder[key] {
+			t.Errorf("%q is missing from serviceKeyOrder; it would never be advertised", key)
+		}
+	}
+	if len(serviceKeyOrder) != len(all) {
+		t.Errorf("serviceKeyOrder has %d keys, the constant list has %d", len(serviceKeyOrder), len(all))
+	}
+}
