@@ -76,7 +76,7 @@ func startSchedulerProc(t *testing.T, args ...string) (io.WriteCloser, <-chan js
 // stayed green while covering none of it. They now fail on an engine they do
 // not expect, so adding one to the scheduler without adding it here is a loud
 // failure rather than a quiet gap in coverage.
-var scheduledEngines = []string{"ollama", "lmstudio"}
+var scheduledEngines = []string{"ollama", "lmstudio", "max"}
 
 func scheduledEngine(engine string) bool {
 	for _, known := range scheduledEngines {
