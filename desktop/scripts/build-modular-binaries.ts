@@ -211,6 +211,12 @@ function listFingerprintFiles(repo: string): string[] {
                 out.push(full)
             } else if (entry === 'go.mod' || entry === 'go.sum') {
                 out.push(full)
+            } else if (entry.endsWith('.json') && path.basename(dir) === 'manifests') {
+                // Engine manifests are compiled into the binary with go:embed, so
+                // they are source. Hashing only .go files meant editing the file
+                // that *is* an engine left cli-bin "current" and shipped a binary
+                // with the previous manifest still embedded in it.
+                out.push(full)
             }
         }
     }

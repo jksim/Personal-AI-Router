@@ -841,6 +841,7 @@ class ModularSupervisor {
         passPath('--node-info-path', 'node-info')
         passPath('--proxy-path', 'proxy')
         passPath('--lmstudio-proxy-path', 'lmstudio-proxy')
+        passPath('--max-proxy-path', 'max-proxy')
         passPath('--workload-manager-path', 'workload-manager')
         passPath('--cluster-manager-path', 'cluster-manager')
         passPath('--settings-path', 'node-settings')

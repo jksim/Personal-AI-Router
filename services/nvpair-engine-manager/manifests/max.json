@@ -70,6 +70,14 @@
         "cd \"{models_dir}\" 2>/dev/null || exit 0; for d in models--*; do [ -d \"$d/snapshots\" ] || continue; ls \"$d/snapshots\" >/dev/null 2>&1 || continue; printf '%s\\n' \"$d\" | sed -e 's/^models--//' -e 's/--/\\//g'; done"
       ]
     },
+    "pull_model": {
+      "description": "Download a model into the HuggingFace cache so MAX can serve it (params: {\"model\": \"<owner/name>\"}). MAX would fetch it on first launch anyway; doing it here means the download is visible and finishes before the engine is asked to start.",
+      "cmd": [
+        "{install_dir}/venv/bin/hf",
+        "download",
+        "{model}"
+      ]
+    },
     "loaded_models": {
       "description": "List the model MAX is currently serving. MAX serves one model per process, so this returns at most one entry.",
       "http": {
