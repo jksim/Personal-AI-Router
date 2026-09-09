@@ -125,6 +125,36 @@ func (e *Executor) persistPort(engine string, port int) error {
 
 	// Non-bundled engine: the full manifest lives only here, so merge the
 	// port into it rather than overwriting the file with a partial.
+	return mergeOverride(path, delta)
+}
+
+// persistRuntimeField writes one runtime field into the per-engine manifest
+// override, the same way persistPort writes runtime.port. Split out because
+// every persisted runtime setting wants identical semantics: a bundled engine
+// stores only the delta so bundled upgrades to everything else still apply, and
+// a non-bundled engine merges into the full manifest that lives in the override
+// dir rather than clobbering it.
+//
+// Unlike the port there is no bundled default to fall back to, so nothing is
+// ever removed here — an engine with no selected model simply has no override.
+func (e *Executor) persistRuntimeField(engine, field string, value any) error {
+	if e.overrideDir == "" {
+		return fmt.Errorf("no config directory available to persist %s", field)
+	}
+	if err := os.MkdirAll(e.overrideDir, 0o755); err != nil {
+		return fmt.Errorf("create override dir: %w", err)
+	}
+	path := filepath.Join(e.overrideDir, engine+".json")
+	delta := map[string]any{"engine": engine, "runtime": map[string]any{field: value}}
+	if _, bundled := e.reg.bundledDefaultPort(engine); bundled {
+		return writeJSONAtomic(path, delta)
+	}
+	return mergeOverride(path, delta)
+}
+
+// mergeOverride deep-merges delta into the override file at path, creating it
+// when absent. Atomic (tmp + rename).
+func mergeOverride(path string, delta map[string]any) error {
 	existing, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
