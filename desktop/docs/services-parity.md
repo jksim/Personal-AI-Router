@@ -33,7 +33,7 @@ history.
 | Cluster pairing            | Complete                        | PIN pairing, identity, membership, leave, and removal                                                                                           |
 | Cluster transport security | Backend-owned                   | Node-to-node transport security, including the proxies' cluster-mTLS inference ingress, is entirely backend; Personal AI Router implements none |
 | Settings                   | Partial                         | Cluster identity settings are used; inert settings are not surfaced                                                                             |
-| Model catalog search       | Electron-owned                  | Curated Ollama and LM Studio catalogs are fetched in Electron main                                                                              |
+| Model catalog search       | Electron-owned                  | Curated Ollama, LM Studio and MAX catalogs are served from Electron main                                                                       |
 
 ## Supervision
 
@@ -197,8 +197,18 @@ Personal AI Router uses:
 - Ollama `run_model`, `unload_model` (`keep_alive: 0`), and `delete_model`;
 - LM Studio `load_model`, `unload_model`, and `delete_model` (`remove_path`).
 
-Both engines expose Load, Eject, and Delete in the model manager when the
-backend action exists. Keep-alive / expiry controls remain unsupported.
+Each engine exposes Load, Eject, and Delete in the model manager when both the
+backend action and the engine's capability entry allow it. Keep-alive / expiry
+controls remain unsupported.
+
+MAX is the engine those capabilities differ most for, because it serves one
+model per process with no hot swap. `EngineCapabilities.max` declares no Eject
+(the way to free the memory is to stop the engine) and no Delete (its models
+live in the shared HuggingFace cache, which other tools on the machine use), and
+sets `modelOpsWhenStopped` so a model can be chosen while the engine is down —
+that is the normal way to pick what it will serve next. Load on MAX is routed by
+the engine manager to a persist-and-relaunch path rather than an in-place load,
+so the desktop sends the same `loadModel` command it sends any other engine.
 
 LM Studio's `delete_model` declares `restart_after`, so the engine manager
 restarts a running LM Studio once the files are removed — its `/v1/models` is
@@ -422,7 +432,7 @@ provide an equivalent client-facing contract:
 | Persist and replay manual node entries                      | `manual-nodes-store.ts`, `modular-supervisor.ts` |
 | Bridge the local node into engine proxies                   | `modular-supervisor.ts`                          |
 | Present optimistic engine transition state                  | `pending-actions.store.ts`, bridge state         |
-| Serve the model hub (Ollama committed list, LM Studio live) | `src/electron/model-hub/`                        |
+| Serve the model hub (Ollama and MAX committed lists, LM Studio live) | `src/electron/model-hub/`               |
 | Accumulate and reconcile receiver-side pending invites      | `modular-state.ts`, `modular-supervisor.ts`      |
 | Mirror backend-coupled runtime defaults not yet reported    | `modular-runtime.ts`                             |
 | Collapse a superseded node row before the scanner proves it | `modular-state.ts`, `modular-runtime.ts`         |

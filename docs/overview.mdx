@@ -35,7 +35,7 @@ These terms have specific meanings in PAIR:
   is no server, controller, or primary node.
 - **Cluster** — the set of nodes you have paired together. A node belongs to at
   most one cluster, and it must leave before it can join another.
-- **Engine** — the local inference server that runs models: Ollama or LM Studio.
+- **Engine** — the local inference server that runs models: Ollama, LM Studio or MAX.
   PAIR can install, start, stop, and update an engine, or adopt one you already
   run yourself.
 - **Model** — what you prepare on each node. Nodes do not share models, so a
@@ -95,7 +95,7 @@ request, and that engine's current inventory advertises the requested model.
 Unknown and non-matching inventories are excluded; if no owner is available, the
 proxy returns a local `502`. Among eligible owners, the proxy honors manual
 selection first, then the scheduler's priority order, then a deterministic
-default. The scheduler ranks nodes by total pending work across both engines, and
+default. The scheduler ranks nodes by total pending work across all engines, and
 each proxy also counts requests it has just dispatched, so a burst of concurrent
 requests spreads out instead of waiting for workload reports to catch up.
 
@@ -121,7 +121,7 @@ For the trust boundaries in detail, refer to
 
 - A local endpoint for compatible AI applications and development tools.
 - LAN discovery plus manually configured nodes.
-- Ollama-compatible and LM Studio/OpenAI-compatible routing proxies.
+- Ollama-compatible and OpenAI-compatible routing proxies, one per engine.
 - Pairing and cluster membership managed by the background services.
 - Model-aware, workload-informed routing of independent requests.
 - Encrypted routing between machines: a request sent to another node travels over
@@ -166,7 +166,7 @@ It stages the generated binaries in `desktop/cli-bin/`.
 The Go tree contains 13 build outputs:
 
 - `nvpair-ui-broker`: service entry point, worker supervisor, and JSON-RPC API
-- `ollama-proxy` and `lmstudio-proxy`: compatible inference proxies
+- `ollama-proxy`, `lmstudio-proxy` and `max-proxy`: compatible inference proxies
 - `nvpair-node-scanner` and `nvpair-node-info`: discovery and host telemetry
 - `nvpair-manual-nodes`: user-specified nodes
 - `nvpair-engine-manager`: local engine and model lifecycle

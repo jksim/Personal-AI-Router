@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 # Managing Engines in NVIDIA Personal AI Router
 
 An **engine** is the local inference runtime Personal AI Router (PAIR) uses to
-run models. Today that means Ollama or LM Studio on a given machine. PAIR can
-install and run those engines for you, or work with a copy you already have.
+run models. Today that means Ollama, LM Studio or MAX on a given machine. PAIR
+can install and run those engines for you, or work with a copy you already have.
 This page explains what you can expect when you install, start, stop, update, or
 remove an engine.
 
@@ -25,6 +25,12 @@ one compatible engine that is:
 
 A request only goes to a machine when that machine is online, an eligible
 engine is running there, and the requested model is available on it.
+
+Engines differ in where they run. Ollama and LM Studio are available on
+Windows, Linux and macOS; **MAX is Linux x86-64 only** and needs an AVX2-class
+CPU and glibc 2.34 or newer. PAIR installs MAX into its own self-contained
+environment rather than changing the system Python, which costs roughly 1.8 GB
+of disk.
 
 ## Managing Engines
 
@@ -74,7 +80,7 @@ When you install an engine, consider the following:
   configures it, and owns it from then on.
 - A successful install **starts the engine** as part of the same flow, so you
   normally do not need a separate start step right after install.
-- If Ollama or LM Studio is already running on the machine, PAIR can **adopt**
+- If a supported engine is already running on the machine, PAIR can **adopt**
   that install instead of downloading another copy. Adoption helps when the
   usual engine port is already in use.
 
@@ -177,11 +183,33 @@ working with **models** (download, load, unload, and delete):
 | Make the runtime available for requests | The engine switch |
 | Get a model's weights onto the machine | **Add model** |
 | Hold a model in memory, when the engine needs it | **Load** |
-| Free that memory without deleting anything | **Eject** |
+| Free that memory without deleting anything | **Eject**, where the engine supports it |
 | Remove a downloaded model | **Delete**, where the engine supports it |
 
 **Eject** removes a model from memory only. The download stays, and **Load**
 brings it back without fetching it again.
+
+### Engines that serve one model at a time
+
+Not every engine holds several models at once. **MAX** serves exactly one model
+per process and cannot swap it in place, which changes what two of those actions
+mean:
+
+- **Load** selects the model the engine will serve and restarts it onto that
+  model. It is a choice about how the engine runs, not an extra model held
+  alongside the others. Because MAX compiles a model the first time it loads
+  one, this can take minutes rather than seconds.
+- **Load** is available while the engine is **stopped**. That is the normal way
+  to choose what it will serve the next time it starts.
+- There is no **Eject**: the way to free the memory is to stop the engine.
+- There is no **Delete**. MAX keeps its models in the shared HuggingFace cache
+  (`~/.cache/huggingface`), which other tools on the machine may also be using,
+  so PAIR does not delete from it.
+
+A model already in that shared cache is listed whether or not MAX can serve it —
+an embedding model put there by another tool will appear, and selecting it fails
+because MAX serves text generation. The engine card reports the engine's own
+reason when that happens.
 
 ![An engine's model list showing the Load, Eject, and Delete actions against a downloaded model.](assets/onboarding/engine-lifecycle/04-model-actions.png)
 

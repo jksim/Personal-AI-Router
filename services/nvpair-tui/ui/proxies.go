@@ -29,7 +29,7 @@ type proxyNode struct {
 // label differ.
 type proxyEngine struct {
 	label    string // "Ollama" / "LM Studio"
-	prefix   string // "proxy" / "lmstudio-proxy"
+	prefix   string // "proxy" / "lmstudio-proxy" / "max-proxy"
 	ready    bool
 	port     int
 	selected string
@@ -92,6 +92,7 @@ func newProxiesView(client *rpc.Client) *proxiesView {
 		engines: []*proxyEngine{
 			{label: "Ollama", prefix: "proxy", table: newTable(nil)},
 			{label: "LM Studio", prefix: "lmstudio-proxy", table: newTable(nil)},
+			{label: "MAX", prefix: "max-proxy", table: newTable(nil)},
 		},
 	}
 	return v
@@ -211,13 +212,18 @@ func (v *proxiesView) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (v *proxiesView) handleNotification(msg *rpc.Message) tea.Cmd {
+	// Matched against the pane list rather than fixed indices: a hardcoded
+	// index per engine silently sends a new engine's events to the wrong pane,
+	// or to none. No prefix here is a prefix of another ("max-proxy:" does not
+	// start with "proxy:"), so first match wins safely.
 	idx := -1
-	switch {
-	case strings.HasPrefix(msg.Method, "lmstudio-proxy:"):
-		idx = 1
-	case strings.HasPrefix(msg.Method, "proxy:"):
-		idx = 0
-	default:
+	for i, engine := range v.engines {
+		if strings.HasPrefix(msg.Method, engine.prefix+":") {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
 		return nil
 	}
 	if strings.HasSuffix(msg.Method, ":ready") {

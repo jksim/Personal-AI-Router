@@ -5,14 +5,69 @@ SPDX-License-Identifier: Apache-2.0
 
 # nvpair-engine-manager
 
-A config-driven control plane for local inference engines (Ollama today;
-Intel/others via a dropped-in manifest). It manages everything about an
-engine **except serving inference**: detect, user-mode install,
+A config-driven control plane for local inference engines (Ollama, LM Studio
+and MAX today; others via a dropped-in manifest). It manages everything about
+an engine **except serving inference**: detect, user-mode install,
 start/stop/restart, health, and config-declared actions. Adding an engine
 is a JSON manifest, not code.
 
 The bundled manifests under `manifests/` are the working reference for manifest
 authoring.
+
+### Engines that serve one model per process
+
+Most engines load a model into a running server. Some — MAX is the bundled
+example — serve exactly one model per process with no hot swap, so choosing a
+model is **launch configuration, not a model operation**.
+
+Such a manifest templates `{model}` in its launch strings:
+
+```jsonc
+"runtime": {
+  "mode": "process",
+  "bin": "{install_dir}/venv/bin/max",
+  "args": ["serve", "--model", "{model}", "--port", "{port}"]
+}
+```
+
+`{model}` is legal only in the strings resolved at launch — `runtime.bin`,
+`runtime.args`, `runtime.env`, and the command-mode `start`/`stop.cmd`. It is
+rejected in detection, install, uninstall and the probes, none of which run
+with a model selected; accepting it there would put a literal `{model}` on a
+command line instead of failing at load.
+
+The selected model is persisted as a `{ engine, runtime: { model } }` override
+beside the port, so it survives a restart. `engine:action{load_model}` on such
+an engine is routed to that persistence-and-relaunch path, so a caller does not
+need to know which kind of engine it is addressing — and an engine with nothing
+selected refuses to start rather than substituting an empty string.
+
+### Listing models from disk
+
+An action's `result` spec normally extracts strings from JSON
+(`{"array": "data", "field": "id"}`). An engine with no model-list endpoint can
+instead print one model per line and declare:
+
+```jsonc
+"list_models": {
+  "cmd": ["sh", "-c", "… enumerate the store …"],
+  "result": { "lines": true }
+}
+```
+
+`lines` is mutually exclusive with `array`/`field`, and a `result` spec that
+declares neither is rejected — it would extract nothing while looking
+configured. `{models_dir}` resolves per engine, so an engine whose models live
+somewhere other than LM Studio's tree gets its own directory.
+
+### Where a managed engine runs
+
+A process-mode engine is launched with its working directory set to its own
+install dir rather than inheriting the service's. An inherited directory is
+configuration the user never agreed to: MAX reads a `.env` from its working
+directory, and settings found there override the manifest's — including the
+loopback bind. An engine PAIR adopted rather than installed has no install dir
+and keeps the inherited one.
 
 ## Communication
 
@@ -42,7 +97,7 @@ Requests (caller → service):
 | `engine:action` | `{ engine, action, params }` | the engine's raw response. `action:"pull_model"` is streamed: it emits live `engine:pull-progress` notifications and returns the pull's terminal result (see below). An action whose manifest declares `restart_after` (LM Studio's `delete_model`) restarts a running engine before replying, so the response also means the engine is back and healthy |
 | `engine:logs` | `{ engine }` | `{ lines: [LogLine] }` |
 | `engine:errors` | — | `{ errors: [ServiceError] }` |
-| `engine:models` | — | `{ models: [string], modelsByEngine: { <engine>: [string] }, loadedByEngine: { <engine>: [string] } }` — the flat de-duplicated union of every running engine's models, the per-engine breakdown keyed by engine name, and the per-engine set of models currently **loaded in memory** (all normalized from each engine's `list_models` / `loaded_models` action `result` spec). `modelsByEngine` carries a key for every running engine whose inventory was successfully queried, including an empty list = "running, no models available"; a missing key means not running / not queryable / invalid response. `loadedByEngine` uses the same known-empty distinction for residency and also omits engines with no loaded endpoint. The `/v1/models` HTTP surface returns the same shape. |
+| `engine:models` | — | `{ models: [string], modelsByEngine: { <engine>: [string] }, loadedByEngine: { <engine>: [string] } }` — the flat de-duplicated union of every queryable engine's models, the per-engine breakdown keyed by engine name, and the per-engine set of models currently **loaded in memory** (all normalized from each engine's `list_models` / `loaded_models` action `result` spec). `modelsByEngine` carries a key for every engine whose inventory was successfully queried, including an empty list = "queryable, no models available"; a missing key means not queryable / invalid response. An engine whose `list_models` is a **command** is queried even while it is stopped, because such a listing reads the engine's own on-disk store rather than asking the server — gating it on running made a stopped engine's models vanish from the model manager, which is where a user goes to choose what it should serve next. `loadedByEngine` always requires a running engine: residency is not knowable while the process is down. `loadedByEngine` uses the same known-empty distinction for residency and also omits engines with no loaded endpoint. The `/v1/models` HTTP surface returns the same shape. |
 | `engine:remote-get-installed` | `{ node }` | `{ engines: [EngineStatus] }` fetched from the remote node over `ec` mTLS |
 | `engine:remote-install` | `{ node, engine, start? }` | `{ opId, status: EngineStatus }` after the remote install (live progress via `engine:remote-progress`) |
 | `engine:remote-pull-model` | `{ node, engine, model?, params? }` | `{ opId, result }` after the remote pull (live progress via `engine:remote-progress`) |
@@ -264,7 +319,11 @@ matching how `nvpair-errors` and `nvpair-workload-manager` handle their own
 cluster traffic. Managed engines bind **loopback by default**, but a manifest's
 `runtime.bind` may open an inference engine to the LAN — Ollama ships
 `0.0.0.0` to serve the cluster — overridable per call via
-`engine:start {bind}`; readiness/health probes always target loopback.
+`engine:start {bind}`; readiness/health probes always target loopback. An
+engine that takes its bind address from the environment rather than a flag
+(MAX reads `MAX_SERVE_HOST` and defaults to `0.0.0.0`) sets it in
+`runtime.env`, which is why a managed engine's working directory is pinned:
+a stray `.env` beside it could otherwise put it back on the LAN.
 Downloads are **HTTPS-only** (plain `http` only from loopback) and verified
 against the manifest's `sha256` when one is pinned; an unpinned fetch runs
 with a loud warning.

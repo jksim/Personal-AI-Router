@@ -35,6 +35,7 @@ var healthWorkers = []string{
 	"node-info",
 	"proxy",
 	"lmstudio-proxy",
+	"max-proxy",
 	"workload-manager",
 	"engine-manager",
 	"manual-nodes",

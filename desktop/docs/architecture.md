@@ -110,8 +110,8 @@ subscribes to broker relays after `app:ready`, and converts backend responses
 into stable UI contracts.
 
 Electron reports the service connected after broker `app:ready`. The
-broker-owned Ollama and LM Studio proxies remain asynchronous capabilities; a
-late or failed proxy does not misreport the broker startup as failed. If
+broker-owned engine proxies remain asynchronous capabilities; a late or failed
+proxy does not misreport the broker startup as failed. If
 `app:ready` does not arrive within the startup deadline, Overview opens Settings
 
 > Service, surfaces the failure, and leaves restart and log actions available
@@ -195,7 +195,7 @@ Engine lifecycle and model operations flow through the broker's `engine:*`
 relay to `nvpair-engine-manager`. The renderer identifies engines with the
 closed `EngineType` union and narrows external strings with `isEngineType()`.
 
-The Ollama and LM Studio proxies are cluster-aware. For model-bearing inference,
+The engine proxies are cluster-aware. For model-bearing inference,
 each proxy first keeps only nodes whose per-engine discovery inventory advertises
 the requested model. Empty and non-matching inventories are excluded; an empty
 owner set returns a local `502`. Routing precedence within the eligible set is:

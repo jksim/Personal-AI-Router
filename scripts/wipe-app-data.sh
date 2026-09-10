@@ -24,7 +24,7 @@
 #   - desktop/scripts/build/{installer.nsh,linux/after-remove.sh,macos/uninstall.sh}
 #   - scripts/wipe-app-data.ps1 (Windows twin — update both in the same change)
 #
-# Explicit exclusions (never add): ~/.ollama, ~/.lmstudio, external engine
+# Explicit exclusions (never add): ~/.ollama, ~/.lmstudio, ~/.cache/huggingface, external engine
 # installs, and the application install tree (Program Files / /opt/PAIR /
 # PAIR.app).
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ Usage: scripts/wipe-app-data.sh [options]
 Delete all Personal AI Router-owned application data (settings, logs, cluster
 identity, chat history, PAIR-managed engines under the app data root).
 
-Does NOT delete third-party model libraries (e.g. ~/.ollama, ~/.lmstudio).
+Does NOT delete third-party model libraries (e.g. ~/.ollama, ~/.lmstudio, ~/.cache/huggingface).
 Does NOT uninstall the application binary.
 
 Options:
@@ -214,7 +214,7 @@ if [[ "$CONFIRM" -eq 0 ]]; then
   fi
   echo ""
   echo "WARNING: This permanently deletes all Personal AI Router app data."
-  echo "Third-party model libraries (e.g. ~/.ollama, ~/.lmstudio) are NOT removed."
+  echo "Third-party model libraries (e.g. ~/.ollama, ~/.lmstudio, ~/.cache/huggingface) are NOT removed."
   echo ""
   echo "Paths to remove:"
   for entry in "${TARGETS[@]}"; do

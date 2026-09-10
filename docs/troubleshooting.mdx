@@ -78,7 +78,7 @@ If **Endpoints** cannot find a usable engine or model:
 4. Select **Add model**, download a model, and load it if the engine requires
    an explicit load step.
 
-PAIR may adopt an existing local Ollama or LM Studio installation instead of
+PAIR may adopt an existing local Ollama, LM Studio or MAX installation instead of
 installing a new copy. An engine must be running before you can use models.
 
 To test routing across multiple nodes, prepare the same model on each node that
@@ -149,6 +149,34 @@ Routing confirmation happens on **Overview**:
 
 Send several independent requests to observe multi-node routing. One request
 runs on one selected node.
+
+## The MAX Engine Stops Right After Starting
+
+MAX behaves differently from the other engines in ways that produce this
+symptom. The engine card shows the reason MAX itself reported; the common cases
+are below.
+
+**"Missing required weights: lm_head.weight"** — the selected model is not a
+text-generation model. MAX serves one model per process for text generation, and
+an embedding or reranking checkpoint cannot be loaded that way. Models PAIR
+offers are filtered to ones it can serve, but MAX shares the HuggingFace cache
+(`~/.cache/huggingface`) with every other HuggingFace tool on the machine, so a
+model another tool downloaded is listed too. Choose a different model.
+
+**"symbol not found: cublasCreate_v2"** — the CUDA runtime libraries are
+missing. PAIR installs them alongside MAX, so this points at a damaged install:
+uninstall MAX from its engine card and install it again.
+
+**It appears to hang instead of starting.** MAX compiles a model the first time
+it loads one, which takes minutes rather than seconds, and it reports itself
+running only once it is actually ready to serve. A first start on a large model
+can use most of the ten-minute allowance. Subsequent starts on the same model
+are much faster.
+
+**Its models disappeared while it restarted.** Selecting a model on MAX
+restarts the engine onto that model. The model list is read from disk and stays
+populated while the engine is down; if it empties, the engine-manager is not
+answering — check the logs below.
 
 ## Where the Logs Are
 
