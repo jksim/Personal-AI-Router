@@ -100,8 +100,15 @@ func (e *Executor) ModelsResult(ctx context.Context) ModelsResult {
 		wg.Add(1)
 		go func(i int, name string, listSpec, loadedSpec *ActionResult, listWhileStopped bool) {
 			defer wg.Done()
-			st, err := e.Status(name)
-			if err != nil {
+			st, ok := e.inventoryStatus(name)
+			if !ok {
+				return
+			}
+			// An engine that is not installed has no inventory to report. Its
+			// listing command would still run and, for an engine whose models
+			// live in a shared cache, would report another tool's downloads as
+			// this engine's.
+			if !st.Installed {
 				return
 			}
 			// loaded_models asks what is resident in memory, so it always needs a
@@ -289,4 +296,33 @@ func extractLinesResult(raw json.RawMessage) ([]string, bool) {
 // answered is how a stopped engine came to report no models at all.
 func actionRunsWhileStopped(act Action) bool {
 	return len(act.Cmd) > 0 || act.RemovePath != nil
+}
+
+// inventoryStatus reads an engine's state for the inventory sweep without
+// waiting on an operation already in flight.
+//
+// Status takes the engine's operation lock and re-detects, which is right for a
+// caller asking about one engine. It is wrong here: a start holds that lock for
+// as long as the engine takes to become ready, and a slow engine — MAX compiles
+// a model on first load, which is minutes — would stall the whole model list
+// behind it. That list is served over HTTP to cluster peers enriching this
+// node's models, so one starting engine made this node look like it had none.
+//
+// When no operation is in flight the state is refreshed as before. When one is,
+// the cached state is returned instead: slightly stale beats blocked, and the
+// sweep's own deadline cannot help because a mutex does not observe a context.
+func (e *Executor) inventoryStatus(name string) (EngineStatus, bool) {
+	st, err := e.state(name)
+	if err != nil {
+		return EngineStatus{}, false
+	}
+	if st.opMu.TryLock() {
+		defer st.opMu.Unlock()
+		pathInstalled, _ := e.Detect(name)
+		st.mu.Lock()
+		port := st.port
+		st.mu.Unlock()
+		e.reconcilePresence(context.Background(), name, st, pathInstalled, port, false)
+	}
+	return e.snapshot(name, st), true
 }

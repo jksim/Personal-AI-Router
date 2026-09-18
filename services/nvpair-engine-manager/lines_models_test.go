@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestStoppedEngineStillReportsItsDiskInventory is the bug a user hit: clicking
@@ -127,5 +129,77 @@ func TestActionRunsWhileStopped(t *testing.T) {
 				t.Fatalf("actionRunsWhileStopped() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestInventoryDoesNotWaitOnAStartingEngine is the regression that reached a
+// published branch.
+//
+// Status takes the engine's operation lock, and a start holds it until the
+// engine is ready — minutes, for an engine that compiles a model on first load.
+// The inventory sweep called Status, so one starting engine stalled the whole
+// model list, which is served over HTTP to cluster peers enriching this node.
+// The node looked like it had no models at all, and the sweep's own deadline
+// could not help because a mutex does not observe a context.
+func TestInventoryDoesNotWaitOnAStartingEngine(t *testing.T) {
+	m := testEngineManifest(fakeEngineBin)
+	m.Engine = "slowstart"
+	m.DisplayName = "slowstart"
+	m.Actions = map[string]Action{
+		"list_models": {
+			Cmd:    []string{fakeEngineBin, "echo", "owner/one"},
+			Result: &ActionResult{Lines: true},
+		},
+	}
+	ex := newTestExecutor(t, m)
+	st, err := ex.state("slowstart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.mu.Lock()
+	st.installed = true
+	st.mu.Unlock()
+
+	// Hold the operation lock the way a start in progress does.
+	st.opMu.Lock()
+	defer st.opMu.Unlock()
+
+	done := make(chan ModelsResult, 1)
+	go func() { done <- ex.ModelsResult(context.Background()) }()
+
+	select {
+	case got := <-done:
+		if len(got.ByEngine["slowstart"]) != 1 {
+			t.Fatalf("inventory = %v, want the engine's cached on-disk models", got.ByEngine)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("ModelsResult blocked on an engine whose operation lock is held")
+	}
+}
+
+// TestInventorySkipsAnUninstalledEngine keeps a listing command from reporting
+// another tool's downloads. MAX reads the shared HuggingFace cache, so an
+// uninstalled MAX would otherwise advertise models it cannot serve.
+func TestInventorySkipsAnUninstalledEngine(t *testing.T) {
+	m := testEngineManifest(fakeEngineBin)
+	m.Engine = "notinstalled"
+	m.DisplayName = "notinstalled"
+	m.Actions = map[string]Action{
+		"list_models": {
+			Cmd:    []string{fakeEngineBin, "echo", "owner/one"},
+			Result: &ActionResult{Lines: true},
+		},
+	}
+	// Detection must genuinely fail: the sweep re-detects when the engine is
+	// idle, so merely clearing the cached flag would be refreshed straight back.
+	for key, plat := range m.Platforms {
+		plat.Detect = []string{filepath.Join(t.TempDir(), "absent", "engine")}
+		m.Platforms[key] = plat
+	}
+	ex := newTestExecutor(t, m)
+
+	got := ex.ModelsResult(context.Background())
+	if _, present := got.ByEngine["notinstalled"]; present {
+		t.Fatalf("an uninstalled engine reported an inventory: %v", got.ByEngine)
 	}
 }
