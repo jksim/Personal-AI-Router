@@ -345,6 +345,14 @@ func (c *catalogService) Catalog(ctx context.Context, engine, platform, arch, qu
 			Searchable: true,
 			Query:      query,
 		}, nil
+	case "max":
+		models, err := maxCatalog()
+		if err != nil {
+			return CatalogResult{}, err
+		}
+		// Every entry is a HuggingFace repo id, which installs anywhere MAX
+		// runs, so nothing is filtered for the target.
+		return CatalogResult{Models: models, Source: maxCatalogSource, Platform: platform, Arch: arch}, nil
 	default:
 		return CatalogResult{}, fmt.Errorf("no model catalog for engine %q", engine)
 	}

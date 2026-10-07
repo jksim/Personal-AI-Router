@@ -23,7 +23,7 @@ func TestSettingsOverrideRestrictsExistingPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := []string{"PAIR_TEST=private"}
-	if err := e.persistRuntimeConfig("fake", 54321, nil, &environment); err != nil {
+	if err := e.persistRuntimeConfig("fake", 54321, nil, &environment, nil); err != nil {
 		t.Fatal(err)
 	}
 	for path, want := range map[string]os.FileMode{e.overrideDir: 0700, path: 0600} {

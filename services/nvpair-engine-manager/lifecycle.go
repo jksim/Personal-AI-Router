@@ -181,6 +181,16 @@ func (e *Executor) doStart(ctx context.Context, st *engineState, engine string, 
 	if rt.CLI != "" {
 		vars["cli"] = expandPath(rt.CLI)
 	}
+	// An engine that serves one model per process names it in its launch args.
+	// Refuse to start with nothing selected rather than substituting an empty
+	// string: the engine would either fail with its own opaque usage error or,
+	// worse, start on a default nobody chose.
+	if runtimeNeedsModel(rt) {
+		if strings.TrimSpace(rt.Model) == "" {
+			return fmt.Errorf("engine %q serves one model at a time and none is selected; choose a model first", engine)
+		}
+		vars["model"] = rt.Model
+	}
 
 	st.mu.Lock()
 	st.port = port
@@ -243,7 +253,7 @@ func (e *Executor) bringUpProcess(ctx context.Context, st *engineState, engine s
 
 	diagnostics := newStartupOutput(launchDiagnosticArgs(rt), launch.Env)
 	defer diagnostics.close()
-	proc, err := startManagedProc(launch.Bin, launch.Args, launch.Env, func(stream, line string) {
+	proc, err := startManagedProc(launch.Bin, launch.Args, launch.Env, processWorkDir(st.installDir), func(stream, line string) {
 		_, _ = diagnostics.Write([]byte(line + "\n"))
 		// Vendor diagnostics may echo arbitrary custom arguments. Keep those
 		// out of exported engine logs; report exit/readiness failures separately.
@@ -398,7 +408,7 @@ func (e *Executor) watch(st *engineState, engine string, proc *managedProc) {
 		st.mu.Unlock()
 		if current && !stopping {
 			e.reporter.report(serviceError{
-				ID: exitedID(engine), Message: engine + " exited unexpectedly",
+				ID: exitedID(engine), Message: exitMessage(engine, st.logs),
 				Severity: "error", Action: "none", EngineType: engine,
 			})
 			e.emitState(engine)
@@ -952,4 +962,82 @@ func fileExists(p string) bool {
 	}
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// runtimeNeedsModel reports whether this engine's launch strings template
+// {model}, which is what makes it a one-model-per-process engine.
+//
+// It is derived from the manifest rather than stored as a flag, so an engine
+// becomes model-configured by templating its args and nothing else has to agree.
+func runtimeNeedsModel(rt Runtime) bool {
+	strs := append([]string{rt.Bin}, rt.Args...)
+	for _, cmd := range rt.Start {
+		strs = append(strs, cmd...)
+	}
+	for _, v := range rt.Env {
+		strs = append(strs, v)
+	}
+	if rt.Stop != nil {
+		strs = append(strs, rt.Stop.Cmd...)
+	}
+	for _, s := range strs {
+		if strings.Contains(s, "{model}") {
+			return true
+		}
+	}
+	return false
+}
+
+// exitMessage explains an unexpected exit using the engine's own last words.
+//
+// "<engine> exited unexpectedly" on its own is unactionable: it is the same
+// sentence whether the model is unservable, a GPU library is missing, or the
+// machine ran out of memory. The engine has just said which — asking a model to
+// run that its weights cannot support prints "Missing required weights:
+// lm_head.weight" — and that line was being thrown away, leaving a user to guess.
+func exitMessage(engine string, logs *logBuffer) string {
+	base := engine + " exited unexpectedly"
+	if logs == nil {
+		return base
+	}
+	if reason := lastErrorLine(logs.snapshot()); reason != "" {
+		return base + ": " + reason
+	}
+	return base
+}
+
+// lastErrorLine picks the most useful line from an engine's captured output:
+// the final one that looks like a diagnosis. Engines print a traceback and then
+// a summary, so the last matching line is closer to the cause than the first.
+func lastErrorLine(lines []LogLine) string {
+	const maxReasonLen = 300
+	for i := len(lines) - 1; i >= 0; i-- {
+		text := strings.TrimSpace(lines[i].Text)
+		if text == "" || !looksLikeFailure(text) {
+			continue
+		}
+		if len(text) > maxReasonLen {
+			text = text[:maxReasonLen] + "…"
+		}
+		return text
+	}
+	return ""
+}
+
+// looksLikeFailure keeps the reason line recognisable without trying to parse
+// any particular engine's log format. A false positive costs a slightly odd
+// suffix; a false negative costs the user the only clue they had.
+//
+// "crashed" is deliberately absent. An engine tends to print its diagnosis and
+// then announce that it is crashing, so matching the announcement would replace
+// "Missing required weights: lm_head.weight" with "Worker crashed, shutting
+// down" — which tells the user only what PAIR has already told them.
+func looksLikeFailure(text string) bool {
+	lowered := strings.ToLower(text)
+	for _, marker := range []string{"error", "abort", "fatal", "exception", "failed", "traceback", "not supported", "missing required"} {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+	return false
 }

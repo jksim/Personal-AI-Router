@@ -18,7 +18,7 @@ func startTermIgnoringProcess(t *testing.T) *managedProc {
 	script := `trap '' TERM
 : > "$1"
 while :; do sleep 1; done`
-	proc, err := startManagedProc("/bin/sh", []string{"-c", script, "stubborn-engine", ready}, nil, nil)
+	proc, err := startManagedProc("/bin/sh", []string{"-c", script, "stubborn-engine", ready}, nil, "", nil)
 	if err != nil {
 		t.Fatalf("start term-ignoring process: %v", err)
 	}

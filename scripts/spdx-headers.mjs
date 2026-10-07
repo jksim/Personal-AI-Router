@@ -30,6 +30,12 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const COPYRIGHT_HOLDER = 'NVIDIA CORPORATION & AFFILIATES. All rights reserved.'
+
+// Holders this repository accepts on an existing file. Upstream code keeps
+// NVIDIA's; a file first written by a contributor keeps theirs, which the DCO
+// sign-off already attests to. Only COPYRIGHT_HOLDER is written by --fix, so a
+// new file still gets the project's own notice unless its author sets one.
+const ACCEPTED_COPYRIGHT_HOLDERS = [COPYRIGHT_HOLDER, 'Jarrett Simerson']
 const LICENSE_IDENTIFIER = 'Apache-2.0'
 
 // A header may sit below a shebang, an XML prologue, or YAML frontmatter, so the
@@ -209,7 +215,7 @@ function inspect(text) {
     // Strip a block-comment terminator the tag regex swept up on a one-line header.
     const notice = copyright[1].replace(/\s*(-->|\*\/)\s*$/, '').trim()
     const parsed = notice.match(COPYRIGHT_TEXT)
-    if (parsed === null || parsed[1] !== COPYRIGHT_HOLDER) {
+    if (parsed === null || !ACCEPTED_COPYRIGHT_HOLDERS.includes(parsed[1])) {
         return { state: 'review', detail: `nonstandard copyright line: ${notice}` }
     }
     return { state: 'ok' }

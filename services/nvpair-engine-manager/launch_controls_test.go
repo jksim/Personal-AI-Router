@@ -134,7 +134,7 @@ func TestBundledLlamaCPPDisablesCORSByDefault(t *testing.T) {
 func TestBundledNetworkingControls(t *testing.T) {
 	reg := loadWithOverrides(t, t.TempDir())
 	// Adding a bundled engine requires an explicit networking review and cases.
-	wantEngines := []string{"llamacpp", "lmstudio", "ollama"}
+	wantEngines := []string{"llamacpp", "lmstudio", "max", "ollama"}
 	names := reg.Names()
 	slices.Sort(names)
 	if !slices.Equal(names, wantEngines) {
@@ -167,6 +167,18 @@ func TestBundledNetworkingControls(t *testing.T) {
 					}
 					valid = []string{"--host 127.0.0.1 --port 23456", "--host=127.0.0.1 --port=23456", "--port 23456 --cors-origins https://example.test"}
 					invalid = []string{"--host 0.0.0.0", "--host=::", "--port 0", "--port 65536", "--port", "--cors-origins=*", "--port 23456 --port 23457", "-- --host 0.0.0.0"}
+				case "max":
+					// MAX takes its port as a flag or env var and its bind
+					// address only from the environment — it registers no
+					// --host flag. It also ships no CORS middleware, so there
+					// is no browser-access policy to make editable; the absence
+					// of a cors control here is the reviewed answer, not an
+					// omission.
+					if !reflect.DeepEqual(policy.Controls, []LaunchControl{{Value: "{server.port}", Flags: []string{"--port"}, Env: []string{"MAX_SERVE_PORT"}}, {Value: "{server.host}", Env: []string{"MAX_SERVE_HOST"}}}) {
+						t.Fatal("incomplete MAX controls")
+					}
+					valid = []string{"--port 23456", "--port=23456", "MAX_SERVE_PORT=23456", `"--port" "23456"`}
+					invalid = []string{"--port 0", "--port 65536", "--port", "--port no", "MAX_SERVE_HOST=0.0.0.0", "MAX_SERVE_HOST=::", "MAX_SERVE_PORT=0", "--port 23456 --port 23457"}
 				default:
 					if !reflect.DeepEqual(policy.Controls, []LaunchControl{{Value: "{server.host}:{server.port}", Env: []string{"OLLAMA_HOST"}}, {Value: "{cors.origins}", Env: []string{"OLLAMA_ORIGINS"}}}) {
 						t.Fatal("incomplete Ollama controls")

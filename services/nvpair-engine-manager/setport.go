@@ -101,13 +101,22 @@ func (e *Executor) SetPort(ctx context.Context, engine string, port int) (Engine
 // A host-platform port is updated too, when present, because platform values
 // take precedence over shared runtime defaults at load time.
 func (e *Executor) persistPort(engine string, port int) error {
-	return e.persistRuntimeConfig(engine, port, nil, nil)
+	return e.persistRuntimeConfig(engine, port, nil, nil, nil)
+}
+
+// persistModel records the model a one-model-per-process engine will serve,
+// leaving the port and launch overrides exactly as they are. It reuses
+// persistRuntimeConfig rather than writing its own file so the override's
+// validation, permissions and number handling cannot diverge between the two.
+func (e *Executor) persistModel(engine string, port int, model string) error {
+	return e.persistRuntimeConfig(engine, port, nil, nil, &model)
 }
 
 // persistRuntimeConfig writes the port override plus, when non-nil, the launch
-// argument and environment overrides. A nil slice pointer leaves that override
-// exactly as it is on disk; an empty slice clears it to "declared, but empty".
-func (e *Executor) persistRuntimeConfig(engine string, port int, args, environment *[]string) error {
+// argument, environment and selected-model overrides. A nil pointer leaves that
+// override exactly as it is on disk; an empty slice clears a list override to
+// "declared, but empty".
+func (e *Executor) persistRuntimeConfig(engine string, port int, args, environment *[]string, model *string) error {
 	if e.overrideDir == "" {
 		return fmt.Errorf("no config directory available to persist the port")
 	}
@@ -183,6 +192,17 @@ func (e *Executor) persistRuntimeConfig(engine string, port int, args, environme
 	}
 	if environment != nil {
 		hostRuntime["launch_env"] = append([]string{}, (*environment)...)
+	}
+	// The model lives on the shared runtime rather than the host block: an
+	// engine serving one model per process serves the same one on every
+	// platform it supports, and a platform-scoped value would be silently
+	// dropped on the next host.
+	if model != nil {
+		if *model == "" {
+			delete(rt, "model")
+		} else {
+			rt["model"] = *model
+		}
 	}
 	setOverrideObject(platform, "runtime", hostRuntime)
 	setOverrideObject(platforms, host, platform)

@@ -103,7 +103,7 @@ func TestLaunchTextReachesChildLiterally(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proc, err := startManagedProc(parsed[0], parsed[1:], nil, nil)
+	proc, err := startManagedProc(parsed[0], parsed[1:], nil, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

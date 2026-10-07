@@ -45,7 +45,7 @@ func newSettingsHarness(t *testing.T) *settingsHarness {
 
 func newSettingsHarnessForEngine(t *testing.T, engine string) *settingsHarness {
 	t.Helper()
-	ports := make([]int, 4)
+	ports := make([]int, 1+len(engineProxyProfiles))
 	listeners := []net.Listener{}
 	for i := range ports {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -62,11 +62,13 @@ func newSettingsHarnessForEngine(t *testing.T, engine string) *settingsHarness {
 	worker, codec := newTestRPCWorkerPipe(t)
 	h.b.setEngineMgr(worker)
 	proxyWorker, proxyCodec := newTestRPCWorkerPipe(t)
-	proxy := &proxyProcess{peer: proxyWorker.peer, facadeState: map[string]proxyFacadeState{
-		"ollama":   {ready: true, port: ports[1]},
-		"lmstudio": {ready: true, port: ports[2]},
-		"llamacpp": {ready: true, port: ports[3]},
-	}}
+	// One ready facade per engine in the table, so a new engine is covered
+	// without editing the harness.
+	facades := make(map[string]proxyFacadeState, len(engineProxyProfiles))
+	for i, profile := range engineProxyProfiles {
+		facades[profile.Name] = proxyFacadeState{ready: true, port: ports[i+1]}
+	}
+	proxy := &proxyProcess{peer: proxyWorker.peer, facadeState: facades}
 	for _, profile := range engineProxyProfiles {
 		h.b.setEngineProxyHandle(profile, proxy)
 	}

@@ -23,7 +23,7 @@ func TestOllamaIsPreparedFirst(t *testing.T) {
 
 func TestNames(t *testing.T) {
 	got := Names()
-	want := []string{"ollama", "lmstudio", "llamacpp"}
+	want := []string{"ollama", "lmstudio", "llamacpp", "max"}
 	if len(got) != len(want) {
 		t.Fatalf("Names() = %v, want %v", got, want)
 	}

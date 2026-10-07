@@ -15,7 +15,9 @@ type modelActionRequest struct {
 	Model  string `json:"model"`
 }
 
-// ModelLoad warms a model into engine memory using each engine's manifest action.
+// ModelLoad warms a model into engine memory using each engine's manifest
+// action. An engine that selects its model at launch is routed to SetModel by
+// Action, so this path needs no special case.
 func (e *Executor) ModelLoad(ctx context.Context, engine, model string) (json.RawMessage, error) {
 	action, params, err := modelActionWire(engine, "load", model)
 	if err != nil {

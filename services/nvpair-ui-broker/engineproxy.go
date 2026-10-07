@@ -165,6 +165,9 @@ func buildEngineProxyProfiles() []engineProxyProfile {
 		// llama.cpp's managed process is stopped directly by engine-manager.
 		"lmstudio": {Ownership: managedEngine, HealthProbePath: "/v1/models"},
 		"llamacpp": {Ownership: managedEngine, HealthProbePath: "/health"},
+		// MAX is adopted: a listener on :8000 may be a user's own `max serve`,
+		// which the broker plans around rather than moving.
+		"max": {Ownership: adoptedEngine, HealthProbePath: "/health"},
 	}
 	out := make([]engineProxyProfile, 0, len(engines.All()))
 	for _, e := range engines.All() {

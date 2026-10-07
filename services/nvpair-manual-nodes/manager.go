@@ -112,9 +112,15 @@ type ManualNodeStatus struct {
 	// LM Studio is probed on its default OpenAI-API port the same way Ollama
 	// is on 11434, so a manually-added node running LM Studio can be bridged
 	// into lmstudio-proxy by a supervising broker.
-	LMStudioUp     bool        `json:"lmstudio_up"`
-	LMStudioPort   int         `json:"lmstudio_port"`
-	LMStudioModels []string    `json:"lmstudio_models,omitempty"`
+	LMStudioUp     bool     `json:"lmstudio_up"`
+	LMStudioPort   int      `json:"lmstudio_port"`
+	LMStudioModels []string `json:"lmstudio_models,omitempty"`
+	// MAX is probed on its default OpenAI-API port the same way, so a manually
+	// added node running MAX can be bridged into max-proxy by a supervising
+	// broker.
+	MaxUp          bool        `json:"max_up"`
+	MaxPort        int         `json:"max_port"`
+	MaxModels      []string    `json:"max_models,omitempty"`
 	NodeInfoUp     bool        `json:"node_info_up"`
 	NodeInfoPort   int         `json:"node_info_port"`
 	TLSEnabled     bool        `json:"tls_enabled,omitempty"`
@@ -253,6 +259,7 @@ func (m *Manager) probeNode(entry ManualEntry) {
 
 	ollamaUp, ollamaModels := m.probeOllama(addr, 11434)
 	lmStudioUp, lmStudioModels := m.probeLMStudio(addr, lmStudioPort)
+	maxUp, maxModels := m.probeMax(addr, maxPort)
 
 	// Pick scheme + port + client based on the entry's TLS hint.
 	// The operator decides which scheme this manual node uses; we
@@ -290,6 +297,9 @@ func (m *Manager) probeNode(entry ManualEntry) {
 		LMStudioUp:     lmStudioUp,
 		LMStudioPort:   lmStudioPort,
 		LMStudioModels: lmStudioModels,
+		MaxUp:          maxUp,
+		MaxPort:        maxPort,
+		MaxModels:      maxModels,
 		NodeInfoUp:     nodeInfoUp,
 		NodeInfoPort:   nodeInfoPort,
 		TLSEnabled:     entry.TLSPort > 0,
@@ -302,7 +312,7 @@ func (m *Manager) probeNode(entry ManualEntry) {
 		HostUUID:       info.HostUUID,
 	}
 
-	reachable := newStatus.OllamaUp || newStatus.LMStudioUp || newStatus.NodeInfoUp
+	reachable := newStatus.OllamaUp || newStatus.LMStudioUp || newStatus.MaxUp || newStatus.NodeInfoUp
 
 	m.mu.Lock()
 	tn, exists := m.nodes[id]
@@ -331,10 +341,12 @@ func (m *Manager) probeNode(entry ManualEntry) {
 
 	changed := prev.OllamaUp != newStatus.OllamaUp ||
 		prev.LMStudioUp != newStatus.LMStudioUp ||
+		prev.MaxUp != newStatus.MaxUp ||
 		prev.NodeInfoUp != newStatus.NodeInfoUp ||
 		prev.HostUUID != newStatus.HostUUID ||
 		!sliceEqual(prev.OllamaModels, newStatus.OllamaModels) ||
 		!sliceEqual(prev.LMStudioModels, newStatus.LMStudioModels) ||
+		!sliceEqual(prev.MaxModels, newStatus.MaxModels) ||
 		!gpusEqual(prev.GPUs, newStatus.GPUs) ||
 		!cpuEqual(prev.CPU, newStatus.CPU) ||
 		!memoryEqual(prev.Memory, newStatus.Memory) ||

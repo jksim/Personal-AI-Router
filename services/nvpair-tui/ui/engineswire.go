@@ -133,6 +133,16 @@ var modelWires = map[string]modelWire{
 		"delete": modelOnly("delete_model"),
 		"pull":   modelOnly("pull_model"),
 	},
+	// MAX serves one model per process: engine-manager turns load_model into a
+	// relaunch onto that model. It has no unload or delete — its models live in
+	// the shared HuggingFace cache, which PAIR does not delete from — so those
+	// are refused by engine-manager with the engine's own answer.
+	engines.NameMax: {
+		"load":   modelOnly("load_model"),
+		"unload": modelOnly("unload_model"),
+		"delete": modelOnly("delete_model"),
+		"pull":   modelOnly("pull_model"),
+	},
 }
 
 // downloadExamples show what a download name looks like for each engine. The
@@ -142,6 +152,7 @@ var downloadExamples = map[string]string{
 	engines.NameOllama:   "llama3.2",
 	engines.NameLMStudio: "lmstudio-community/Qwen3-8B-GGUF",
 	engines.NameLlamaCPP: "ggml-org/gemma-3-1b-it-GGUF:Q4_K_M",
+	engines.NameMax:      "HuggingFaceTB/SmolLM2-135M-Instruct",
 }
 
 // downloadPrompt is the placeholder for the download-by-name field, with an

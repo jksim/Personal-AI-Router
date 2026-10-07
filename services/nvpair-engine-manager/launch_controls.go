@@ -288,10 +288,11 @@ func validateEffectiveLaunch(rt Runtime, command launchCommand, host, port strin
 			}
 		}
 	}
-	if len(command.Args) < len(p.FixedArgs) || !slices.Equal(command.Args[:len(p.FixedArgs)], p.FixedArgs) {
+	fixed := p.fixedArgs(rt)
+	if len(command.Args) < len(fixed) || !slices.Equal(command.Args[:len(fixed)], fixed) {
 		return fmt.Errorf("launch does not match its fixed startup arguments")
 	}
-	args := command.Args[len(p.FixedArgs):]
+	args := command.Args[len(fixed):]
 	for i := 0; i < len(args); i++ {
 		control, value, last, err := p.readControl(args, i)
 		if err != nil {
@@ -308,4 +309,28 @@ func validateEffectiveLaunch(rt Runtime, command launchCommand, host, port strin
 		return fmt.Errorf("saved launch port does not match the managed server port")
 	}
 	return nil
+}
+
+// fixedArgs is the launch prefix a user cannot edit, with the values PAIR
+// manages substituted in.
+//
+// FixedArgs is a template like the rest of the runtime, and it is compared
+// against a resolved command, so a managed value left as a placeholder matches
+// nothing: an engine whose fixed prefix names its model was refused at start
+// with "launch does not match its fixed startup arguments".
+//
+// The fixed prefix is exactly where a managed value belongs — it is the part of
+// the command the editor does not expose. Today the only one is the selected
+// model of an engine that serves one at a time; {host} and {port} reach the
+// command through declared controls instead, so they are deliberately not
+// substituted here.
+func (p *EditableLaunch) fixedArgs(rt Runtime) []string {
+	if p == nil {
+		return nil
+	}
+	out := make([]string, len(p.FixedArgs))
+	for i, arg := range p.FixedArgs {
+		out[i] = strings.ReplaceAll(arg, "{model}", rt.Model)
+	}
+	return out
 }

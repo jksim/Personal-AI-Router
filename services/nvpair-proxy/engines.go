@@ -145,6 +145,12 @@ var llamaCPPBaseRoutes = []route{
 	{Path: "/v1/models", UpstreamPath: "/models", Role: roleModelListOpenAIGET},
 }
 
+// maxBaseRoutes is MAX's own surface before the shared compatibility routes.
+// MAX serves the OpenAI API and nothing of its own, so this is the model list.
+var maxBaseRoutes = []route{
+	{Path: "/v1/models", Role: roleModelListOpenAIGET},
+}
+
 // openAIInferenceRoutes is the OpenAI-compatible inference surface.
 var openAIInferenceRoutes = []route{
 	{Path: "/v1/chat/completions", Role: roleInferencePOST},
@@ -163,9 +169,14 @@ func buildProfiles() []engineProfile {
 	ollama, _ := engines.ByName("ollama")
 	lmstudio, _ := engines.ByName("lmstudio")
 	llamacpp, _ := engines.ByName("llamacpp")
+	max, _ := engines.ByName(engines.NameMax)
 	ollamaRoutes := slices.Concat(ollamaBaseRoutes, openAIInferenceRoutes, anthropicInferenceRoutes)
 	lmStudioRoutes := slices.Concat(lmStudioBaseRoutes, openAIInferenceRoutes, anthropicInferenceRoutes)
 	llamaCPPRoutes := slices.Concat(llamaCPPBaseRoutes, openAIInferenceRoutes)
+	// No anthropicInferenceRoutes: MAX registers nothing at /v1/messages, and
+	// routing a path the engine answers with a 404 would make the proxy look
+	// like the failure.
+	maxRoutes := slices.Concat(maxBaseRoutes, openAIInferenceRoutes)
 
 	return []engineProfile{
 		{
@@ -192,6 +203,13 @@ func buildProfiles() []engineProfile {
 			Routes:                llamaCPPRoutes,
 			ModelNaming:           exactID,
 			ReservedPersistedPort: 8081,
+		},
+		{
+			Engine:                max,
+			StandalonePort:        8000,
+			Routes:                maxRoutes,
+			ModelNaming:           exactID,
+			ReservedPersistedPort: 8001,
 		},
 	}
 }
