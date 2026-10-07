@@ -71,7 +71,7 @@ interface ManifestFile {
 interface BuildManifest {
     source: 'services-build'
     sourceFingerprint: string
-    services: string
+    product: string
     platform: SupportedPlatform
     arch: ModularPackageArch
     components: Record<string, string>
@@ -145,7 +145,7 @@ function stringRecord(value: JsonValue | undefined): Record<string, string> {
 }
 
 interface ParsedVersions {
-    services: string
+    product: string
     components: Record<string, string>
 }
 
@@ -173,8 +173,8 @@ function readVersions(repo: string): ParsedVersions {
     const versionsPath = path.join(repo, 'versions.json')
     const parsed: JsonValue = JSON.parse(readFileSync(versionsPath, 'utf8'))
     if (!isJsonObject(parsed)) throw new Error(`${versionsPath} is not a JSON object`)
-    const services = typeof parsed['services'] === 'string' ? parsed['services'] : ''
-    return { services, components: stringRecord(parsed['components']) }
+    const product = typeof parsed['product'] === 'string' ? parsed['product'] : ''
+    return { product, components: stringRecord(parsed['components']) }
 }
 
 function ensureGoToolchain(): void {
@@ -210,6 +210,12 @@ function listFingerprintFiles(repo: string): string[] {
             } else if (entry.endsWith('.go') && !entry.endsWith('_test.go')) {
                 out.push(full)
             } else if (entry === 'go.mod' || entry === 'go.sum') {
+                out.push(full)
+            } else if (entry.endsWith('.json') && path.basename(dir) === 'manifests') {
+                // Engine manifests are compiled into the binary with go:embed, so
+                // they are source. Hashing only .go files meant editing the file
+                // that *is* an engine left cli-bin "current" and shipped a binary
+                // with the previous manifest still embedded in it.
                 out.push(full)
             }
         }
@@ -267,7 +273,7 @@ function parseManifest(text: string): BuildManifest | null {
     return {
         source: 'services-build',
         sourceFingerprint,
-        services: typeof parsed['services'] === 'string' ? parsed['services'] : '',
+        product: typeof parsed['product'] === 'string' ? parsed['product'] : '',
         platform,
         arch,
         components: stringRecord(parsed['components']),
@@ -310,9 +316,6 @@ function manifestIsCurrent(
     if (!manifest) return false
     if (manifest.sourceFingerprint !== sourceFingerprint || !sourceFingerprint) return false
     if (manifest.platform !== options.platform || manifest.arch !== options.arch) return false
-    // Without this a services-only bump leaves the manifest current, so the
-    // stale version is what the UI reports in dev.
-    if (manifest.services !== versions.services) return false
     if (JSON.stringify(manifest.components) !== JSON.stringify(versions.components)) return false
 
     const expected = new Set(expectedFileNames(options.platform))
@@ -426,7 +429,7 @@ function main(): void {
     const manifest: BuildManifest = {
         source: 'services-build',
         sourceFingerprint,
-        services: versions.services,
+        product: versions.product,
         platform: options.platform,
         arch: options.arch,
         components: versions.components,

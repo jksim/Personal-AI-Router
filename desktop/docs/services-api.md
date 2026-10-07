@@ -50,6 +50,9 @@
 - ⚠️ nvpair-ui-broker → lmstudio-proxy:get-status
 - ⚠️ nvpair-ui-broker → lmstudio-proxy:set-port
 - ⚠️ nvpair-ui-broker → lmstudio-proxy:unsubscribe
+- ⚠️ nvpair-ui-broker → max-proxy:get-status
+- ⚠️ nvpair-ui-broker → max-proxy:set-port
+- ⚠️ nvpair-ui-broker → max-proxy:unsubscribe
 - ⚠️ nvpair-ui-broker → ollama-proxy:get-status
 - ⚠️ nvpair-ui-broker → ollama-proxy:set-port
 - ⚠️ nvpair-ui-broker → ollama-proxy:unsubscribe
@@ -254,6 +257,7 @@
 | `errors:report` | notification (we consume) | ✅ yes |
 | `errors:update` | notification (we consume) | ✅ yes |
 | `lmstudio-proxy:ready` | notification (we consume) | ➖ ignored |
+| `max-proxy:ready` | notification (we consume) | ➖ ignored |
 | `ollama-proxy:ready` | notification (we consume) | ➖ ignored |
 | `workloads:upsert` | notification (we consume) | ✅ yes |
 | `connection/cluster-auto-sync` | request (we call) | ➖ ignored |
@@ -277,6 +281,10 @@
 | `lmstudio-proxy:set-port` | request (we call) | ⚠️ not called |
 | `lmstudio-proxy:subscribe` | request (we call) | ✅ yes |
 | `lmstudio-proxy:unsubscribe` | request (we call) | ⚠️ not called |
+| `max-proxy:get-status` | request (we call) | ⚠️ not called |
+| `max-proxy:set-port` | request (we call) | ⚠️ not called |
+| `max-proxy:subscribe` | request (we call) | ✅ yes |
+| `max-proxy:unsubscribe` | request (we call) | ⚠️ not called |
 | `node/add` | request (we call) | ✅ yes |
 | `node/discovered` | request (we call) | ✅ yes |
 | `node/remove` | request (we call) | ✅ yes |

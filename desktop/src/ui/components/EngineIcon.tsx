@@ -39,5 +39,32 @@ export default function EngineIcon({ type, size = 32 }: { type: EngineType; size
         )
     }
 
+    // A self-authored wordmark rather than the vendor's logo. The other two
+    // icons are bundled vendor artwork; redistributing a third party's mark
+    // from a fork is a trademark question this does not need to raise, and a
+    // missing icon would render nothing at all.
+    if (type === 'max') {
+        return (
+            <div style={{ ...containerStyle, backgroundColor: '#0b0b0f' }}>
+                <svg viewBox="0 0 64 64" style={imgStyle} role="img" aria-label="MAX">
+                    <title>MAX</title>
+                    <rect width="64" height="64" fill="#0b0b0f" />
+                    <text
+                        x="32"
+                        y="41"
+                        textAnchor="middle"
+                        fontFamily="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+                        fontSize="22"
+                        fontWeight="700"
+                        letterSpacing="1"
+                        fill="#f5f5f7"
+                    >
+                        MAX
+                    </text>
+                </svg>
+            </div>
+        )
+    }
+
     return null
 }

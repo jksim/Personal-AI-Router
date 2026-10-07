@@ -208,12 +208,36 @@ function normalizeLogLevel(value: string | undefined): ModularLogLevel {
  * `{model}` into `lms get {model} --yes`. Sending the wrong key leaves the
  * placeholder unresolved and the engine-manager rejects the call.
  */
+/**
+ * The param key an engine's model actions expect, keyed by engine-manager id.
+ *
+ * This follows the manifest, not preference: an engine whose action is an HTTP
+ * call takes the key its own API reads (Ollama's /api/pull reads `name`), and
+ * an engine whose action is a command takes `model`, because that is the
+ * placeholder the command templates.
+ *
+ * It is a map rather than a ternary because it used to be one, with LM Studio
+ * the only named case and `name` the else. MAX templates `{model}` and received
+ * `name`, so the repo id arrived empty and the download failed with "Repo id
+ * must use alphanumeric chars … : ''". A missing entry here now fails the test
+ * that derives this from the manifests, rather than a user's download.
+ */
+const MODEL_PARAM_KEY: Record<string, 'model' | 'name'> = {
+    ollama: 'name',
+    lmstudio: 'model',
+    max: 'model'
+}
+
+function modelParams(engineManagerEngine: string, model: string): JsonObject {
+    return MODEL_PARAM_KEY[engineManagerEngine] === 'model' ? { model } : { name: model }
+}
+
 function pullModelParams(engineManagerEngine: string, model: string): JsonObject {
-    return engineManagerEngine === 'lmstudio' ? { model } : { name: model }
+    return modelParams(engineManagerEngine, model)
 }
 
 function deleteModelParams(engineManagerEngine: string, model: string): JsonObject {
-    return engineManagerEngine === 'lmstudio' ? { model } : { name: model }
+    return modelParams(engineManagerEngine, model)
 }
 
 /**
@@ -300,7 +324,10 @@ function proxyEngineFromManagerId(id: string): ProxyEngine | null {
 
 /** The broker relay namespace fronting an engine's reverse proxy. */
 function proxyRelayPrefix(engine: ProxyEngine): string {
-    return engine === 'ollama' ? 'ollama-proxy' : 'lmstudio-proxy'
+    // Derived, not branched: the relay prefix and the proxy-source label are
+    // both the engine's component id, so naming two engines here is what a
+    // third one silently falls through.
+    return `${engineManagerName(engine)}-proxy`
 }
 
 /**
@@ -875,6 +902,7 @@ class ModularSupervisor {
         await subscribe('discovery:subscribe', 'subscribe to broker discovery')
         await subscribe('ollama-proxy:subscribe', 'subscribe to broker ollama-proxy relay')
         await subscribe('lmstudio-proxy:subscribe', 'subscribe to broker lmstudio-proxy relay')
+        await subscribe('max-proxy:subscribe', 'subscribe to broker max-proxy relay')
         // Engine events are opt-in and replay no baseline — subscribe then hydrate.
         await subscribe('engine:subscribe', 'subscribe to broker engine relay')
         await subscribe('workloads:subscribe', 'subscribe to broker workloads stream')
@@ -1076,7 +1104,7 @@ class ModularSupervisor {
             const obj = objectValue(result)
             if (obj && booleanValue(obj.ready)) {
                 getModularBridgeState().handleNotification({
-                    source: engine === 'ollama' ? 'ollama-proxy' : 'lmstudio-proxy',
+                    source: proxyRelayPrefix(engine),
                     method: 'ready',
                     params: { port: numberValue(obj.port) }
                 })
@@ -1097,7 +1125,7 @@ class ModularSupervisor {
             if (!obj || !Array.isArray(obj.nodes)) return
             for (const node of obj.nodes) {
                 getModularBridgeState().handleNotification({
-                    source: engine === 'ollama' ? 'ollama-proxy' : 'lmstudio-proxy',
+                    source: proxyRelayPrefix(engine),
                     method: 'node/discovered',
                     params: node
                 })

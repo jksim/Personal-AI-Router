@@ -16,8 +16,9 @@ function wipeMessage() {
                 engine installations under the app data folder.
             </Text>
             <Text kind="body/regular/sm">
-                Third-party model libraries (for example <code>~/.ollama</code> and{' '}
-                <code>~/.lmstudio</code>) are <strong>not</strong> deleted.
+                Third-party model libraries (for example <code>~/.ollama</code>,{' '}
+                <code>~/.lmstudio</code> and <code>~/.cache/huggingface</code>) are{' '}
+                <strong>not</strong> deleted.
             </Text>
         </Stack>
     )

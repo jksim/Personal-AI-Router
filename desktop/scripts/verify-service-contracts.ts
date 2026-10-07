@@ -146,6 +146,30 @@ const DOC_COMPONENT_ROW_RE = /^\|\s*`([a-z0-9-]+)`\s*\|\s*(\d+\.\d+\.\d+)\s*\|/g
 /** "…at product version 1.4.2" / "- Backend product: `1.4.2`" — forbidden. */
 const DOC_PRODUCT_VERSION_RE = /(?:backend product|product version)[^\d\n]{0,4}(\d+\.\d+\.\d+)/gi
 
+// The broker answers get-status, the subscription methods and set-port for
+// every engine from one function parameterised by the engine, so its case labels
+// are bare suffixes ("get-status") rather than full methods. Expand them over the
+// shared engine table, which is where the relay prefixes come from.
+const ENGINE_LOCAL_METHODS_FUNC = 'func (b *Broker) handleEngineProxyLocalMethod('
+
+function engineNames(): string[] {
+    const text = readFileSync(path.join(SERVICES_ROOT, 'shared', 'engines', 'engines.go'), 'utf8')
+    return [...text.matchAll(/^\s*Name:\s*"([a-z0-9]+)",/gm)].map(m => m[1])
+}
+
+function addEngineLocalMethods(text: string, surface: BinarySurface): void {
+    const start = text.indexOf(ENGINE_LOCAL_METHODS_FUNC)
+    if (start < 0) return
+    const end = text.indexOf('\n}\n', start)
+    const body = text.slice(start, end < 0 ? undefined : end)
+    const suffixes = [...body.matchAll(/^\s*case\s+"([a-z-]+)":/gm)].map(m => m[1])
+    const emitted = [...body.matchAll(/component\s*\+\s*":([a-z-]+)"/g)].map(m => m[1])
+    for (const engine of engineNames()) {
+        for (const suffix of suffixes) surface.handles.add(`${engine}-proxy:${suffix}`)
+        for (const suffix of emitted) surface.emits.add(`${engine}-proxy:${suffix}`)
+    }
+}
+
 function extractSurface(dir: string): BinarySurface {
     const surface: BinarySurface = { dir, emits: new Set(), handles: new Set(), dynamic: [] }
     const files = listGoFiles(dir)
@@ -153,7 +177,9 @@ function extractSurface(dir: string): BinarySurface {
 
     for (const file of files) {
         const rel = path.basename(file)
-        const lines = readFileSync(file, 'utf8').split('\n')
+        const text = readFileSync(file, 'utf8')
+        addEngineLocalMethods(text, surface)
+        const lines = text.split('\n')
         lines.forEach((line, idx) => {
             const lineNo = idx + 1
             if (!line.includes('signal.Notify')) {
