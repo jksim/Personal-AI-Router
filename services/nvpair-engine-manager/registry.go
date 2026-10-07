@@ -39,6 +39,18 @@ var allowedPlaceholders = map[string]bool{
 	"models_dir":  true,
 }
 
+// launchPlaceholders are legal *only* in the strings resolved when an engine
+// is launched — runtime bin, args, env, and the command-mode start/stop cmds.
+//
+// They are deliberately kept out of allowedPlaceholders. That set does double
+// duty as the reserved-key deny-list for caller-supplied action params
+// (actions.go), so adding "model" there would make every caller's `model`
+// param be dropped and would break LM Studio's pull/load/unload/delete actions.
+// The two sets are unioned for launch strings and nowhere else.
+var launchPlaceholders = map[string]bool{
+	"model": true,
+}
+
 var placeholderRe = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
 
 // engineNameRe restricts engine names to a safe charset — the name is
@@ -120,9 +132,17 @@ type Runtime struct {
 	Bin            string            `json:"bin,omitempty"`
 	Args           []string          `json:"args,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
-	Port           int               `json:"port"`            // 0 => auto-assign a free loopback port
-	Bind           string            `json:"bind,omitempty"`  // listen addr, substituted as {host}; "" => 127.0.0.1
-	Start          [][]string        `json:"start,omitempty"` // command mode: ordered bring-up commands
+	Port           int               `json:"port"`           // 0 => auto-assign a free loopback port
+	Bind           string            `json:"bind,omitempty"` // listen addr, substituted as {host}; "" => 127.0.0.1
+	// Model is the engine's currently selected model, substituted as {model}
+	// in the launch strings. It is launch-time configuration rather than a
+	// model operation: an engine that serves one model per process (MAX) is
+	// reconfigured and restarted, not asked to load something.
+	//
+	// Distinct from LaunchArgs: those are literal arguments a user supplies,
+	// while this is a managed field the runner templates and persists.
+	Model string     `json:"model,omitempty"`
+	Start [][]string `json:"start,omitempty"` // command mode: ordered bring-up commands
 	// CLI is the engine's control-CLI path for this platform, referenced
 	// elsewhere as {cli}. It lets the manifest's global actions resolve
 	// to the correct per-OS binary (e.g. lms.exe vs lms).
@@ -217,6 +237,14 @@ type Action struct {
 type ActionResult struct {
 	Array string `json:"array"` // top-level array field, e.g. "models" / "data"
 	Field string `json:"field"` // string field per element, e.g. "name" / "id"
+	// Lines reads the action's output as plain text, one model per line,
+	// instead of as JSON. It is how a command-based inventory reports: an
+	// engine with no model-list endpoint enumerates its own store and prints
+	// what it finds, and requiring it to emit JSON from a shell would trade a
+	// trivial parse here for quoting bugs there.
+	//
+	// Mutually exclusive with array/field.
+	Lines bool `json:"lines,omitempty"`
 	// Match, when set, keeps only array elements that pass the ResultMatch
 	// filter. It lets loaded_models reuse the same extractor as list_models
 	// across engines whose list endpoint tags residency (LM Studio's
@@ -702,8 +730,17 @@ func (a *Action) validate(name string) error {
 	if hasHTTP && (strings.TrimSpace(a.HTTP.Method) == "" || strings.TrimSpace(a.HTTP.Path) == "") {
 		return fmt.Errorf("action %q: http.method and http.path are required", name)
 	}
-	if a.Result != nil && (strings.TrimSpace(a.Result.Array) == "" || strings.TrimSpace(a.Result.Field) == "") {
-		return fmt.Errorf("action %q: result.array and result.field are required when result is set", name)
+	if a.Result != nil {
+		hasArrayField := strings.TrimSpace(a.Result.Array) != "" && strings.TrimSpace(a.Result.Field) != ""
+		if a.Result.Lines && hasArrayField {
+			return fmt.Errorf("action %q: result.lines cannot be combined with result.array/result.field", name)
+		}
+		if !a.Result.Lines && !hasArrayField {
+			return fmt.Errorf("action %q: result needs either result.lines or both result.array and result.field", name)
+		}
+		if a.Result.Lines && a.Result.Match != nil {
+			return fmt.Errorf("action %q: result.match filters JSON rows and cannot be used with result.lines", name)
+		}
 	}
 	if a.Result != nil && a.Result.Match != nil {
 		m := a.Result.Match
@@ -735,14 +772,25 @@ func (a *Action) validate(name string) error {
 	return nil
 }
 
-// validatePlaceholders rejects any `{token}` outside allowedPlaceholders
-// across every templated string in the manifest.
+// validatePlaceholders rejects any `{token}` a manifest string cannot resolve.
+// Static strings are held to allowedPlaceholders; launch strings may also use
+// launchPlaceholders, so a typo still fails at load with a clear message rather
+// than at run time with a mangled command line.
 func (m *Manifest) validatePlaceholders() error {
-	for _, s := range m.templatedStrings() {
+	if err := checkPlaceholders(m.staticStrings(), nil); err != nil {
+		return err
+	}
+	return checkPlaceholders(m.launchStrings(), launchPlaceholders)
+}
+
+// checkPlaceholders scans strings against allowedPlaceholders plus extra.
+func checkPlaceholders(strs []string, extra map[string]bool) error {
+	for _, s := range strs {
 		for _, match := range placeholderRe.FindAllStringSubmatch(s, -1) {
-			if !allowedPlaceholders[match[1]] {
-				return fmt.Errorf("unknown placeholder {%s} (allowed: %s)", match[1], strings.Join(allowedPlaceholderList(), ", "))
+			if allowedPlaceholders[match[1]] || extra[match[1]] {
+				continue
 			}
+			return fmt.Errorf("unknown placeholder {%s} (allowed: %s)", match[1], strings.Join(placeholderNameList(extra), ", "))
 		}
 	}
 	return nil
@@ -751,17 +799,28 @@ func (m *Manifest) validatePlaceholders() error {
 // allowedPlaceholderList returns the allowed placeholder names, sorted,
 // so error messages can't drift from the actual allow-set.
 func allowedPlaceholderList() []string {
-	out := make([]string, 0, len(allowedPlaceholders))
+	return placeholderNameList(nil)
+}
+
+// placeholderNameList returns the legal placeholder names for a context,
+// sorted, so an error message cannot drift from the actual allow-set.
+func placeholderNameList(extra map[string]bool) []string {
+	out := make([]string, 0, len(allowedPlaceholders)+len(extra))
 	for k := range allowedPlaceholders {
+		out = append(out, k)
+	}
+	for k := range extra {
 		out = append(out, k)
 	}
 	sort.Strings(out)
 	return out
 }
 
-// templatedStrings collects every string the runner resolves
-// placeholders in, so validatePlaceholders can scan them all.
-func (m *Manifest) templatedStrings() []string {
+// staticStrings collects the templated strings resolved outside a launch —
+// detection, install, uninstall, and the probes. These may only use
+// allowedPlaceholders: there is no selected model at install time, so a
+// {model} here is a manifest bug rather than a late binding.
+func (m *Manifest) staticStrings() []string {
 	var out []string
 	for _, p := range m.Platforms {
 		out = append(out, p.Detect...)
@@ -772,19 +831,8 @@ func (m *Manifest) templatedStrings() []string {
 		if p.Uninstall != nil {
 			out = append(out, p.Uninstall.Run...)
 		}
-		out = append(out, p.Runtime.Bin)
-		out = append(out, p.Runtime.Args...)
-		for _, cmd := range p.Runtime.Start {
-			out = append(out, cmd...)
-		}
-		for _, v := range p.Runtime.Env {
-			out = append(out, v)
-		}
 		out = append(out, probeStrings(p.Runtime.Ready)...)
 		out = append(out, probeStrings(p.Runtime.Health)...)
-		if p.Runtime.Stop != nil {
-			out = append(out, p.Runtime.Stop.Cmd...)
-		}
 	}
 	for _, act := range m.Actions {
 		if act.RemovePath != nil {
@@ -794,6 +842,27 @@ func (m *Manifest) templatedStrings() []string {
 	}
 	// Action http.path / cmd are resolved from runtime params (e.g.
 	// {model}), so they're validated at call time, not statically here.
+	return out
+}
+
+// launchStrings collects the templated strings resolved when the engine is
+// launched. These may additionally use launchPlaceholders, because by then a
+// model has been selected and seeded into the substitution vars.
+func (m *Manifest) launchStrings() []string {
+	var out []string
+	for _, p := range m.Platforms {
+		out = append(out, p.Runtime.Bin)
+		out = append(out, p.Runtime.Args...)
+		for _, cmd := range p.Runtime.Start {
+			out = append(out, cmd...)
+		}
+		for _, v := range p.Runtime.Env {
+			out = append(out, v)
+		}
+		if p.Runtime.Stop != nil {
+			out = append(out, p.Runtime.Stop.Cmd...)
+		}
+	}
 	return out
 }
 

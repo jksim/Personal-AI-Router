@@ -133,6 +133,25 @@ func TestValidateRejects(t *testing.T) {
 			p.Runtime.Args = []string{"serve", "{bogus}"}
 			m.Platforms["linux/amd64"] = p
 		}, "unknown placeholder {bogus}"},
+		// {model} is bound when an engine launches, so it cannot resolve in
+		// anything that runs before one — there is no selected model at install
+		// time. Accepting it there would produce a literal "{model}" on the
+		// command line rather than an error.
+		{"launch placeholder in install", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Install.Run = []string{"bash", "{download}", "{model}"}
+			m.Platforms["linux/amd64"] = p
+		}, "unknown placeholder {model}"},
+		{"launch placeholder in detect", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Detect = []string{"~/.local/{model}/bin"}
+			m.Platforms["linux/amd64"] = p
+		}, "unknown placeholder {model}"},
+		{"launch placeholder in a probe", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Runtime.Ready = &Probe{HTTP: "http://127.0.0.1:{port}/{model}", Status: 200}
+			m.Platforms["linux/amd64"] = p
+		}, "unknown placeholder {model}"},
 		{"action without http or cmd", func(m *Manifest) {
 			m.Actions = map[string]Action{"x": {Description: "neither"}}
 		}, "exactly one of http, cmd, or remove_path"},
@@ -528,5 +547,66 @@ func TestLMStudioInstallBootstrapSafety(t *testing.T) {
 		if !slices.Equal(p.Install.Run, wantRun) {
 			t.Errorf("%s: install run = %v, want %v", key, p.Install.Run, wantRun)
 		}
+	}
+}
+
+// TestLaunchPlaceholdersAreLegalWhereAModelIsBound pins the half of the split
+// that makes a one-model-per-process engine expressible.
+//
+// MAX serves a single model chosen at launch, so its runtime args must template
+// {model}. Every one of these strings is resolved after a model has been
+// selected and seeded into the substitution vars.
+func TestLaunchPlaceholdersAreLegalWhereAModelIsBound(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Manifest)
+	}{
+		{"runtime args", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Runtime.Args = []string{"serve", "--model", "{model}", "--port", "{port}"}
+			m.Platforms["linux/amd64"] = p
+		}},
+		{"runtime bin", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Runtime.Bin = "{install_dir}/venv/bin/{model}"
+			m.Platforms["linux/amd64"] = p
+		}},
+		{"runtime env", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Runtime.Env = map[string]string{"SELECTED": "{model}"}
+			m.Platforms["linux/amd64"] = p
+		}},
+		{"stop cmd", func(m *Manifest) {
+			p := m.Platforms["linux/amd64"]
+			p.Runtime.Stop = &StopSpec{Cmd: []string{"pkill", "-f", "{model}"}}
+			m.Platforms["linux/amd64"] = p
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := validManifest()
+			tc.mutate(&m)
+			if err := m.Validate(); err != nil {
+				t.Fatalf("Validate() = %v, want {model} accepted in a launch string", err)
+			}
+		})
+	}
+}
+
+// TestModelIsNotAnAllowedActionParamKey is the regression this whole split
+// exists to avoid.
+//
+// allowedPlaceholders does double duty as the reserved-key deny-list for
+// caller-supplied action params. The obvious fix for {model} in runtime args —
+// adding "model" to that set — would make every caller's model param be
+// dropped, silently breaking LM Studio's pull, load, unload and delete. The
+// launch set must stay separate.
+func TestModelIsNotAnAllowedActionParamKey(t *testing.T) {
+	if allowedPlaceholders["model"] {
+		t.Fatal("\"model\" is in allowedPlaceholders; that deny-lists it as an action param " +
+			"and breaks every engine whose actions take a model")
+	}
+	if !launchPlaceholders["model"] {
+		t.Fatal("\"model\" must be a launch placeholder, or a one-model-per-process engine cannot template its args")
 	}
 }

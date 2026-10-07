@@ -109,7 +109,7 @@ func TestSavedControlsCannotBypassLaunchValidation(t *testing.T) {
 func TestBundledNetworkingControls(t *testing.T) {
 	reg := loadWithOverrides(t, t.TempDir())
 	// Adding a bundled engine requires an explicit networking review and cases.
-	wantEngines := []string{"lmstudio", "ollama"}
+	wantEngines := []string{"lmstudio", "max", "ollama"}
 	names := reg.Names()
 	slices.Sort(names)
 	if !slices.Equal(names, wantEngines) {
@@ -132,6 +132,18 @@ func TestBundledNetworkingControls(t *testing.T) {
 					}
 					valid = []string{"--port 23456", "--port=23456", "-p 23456", "-p23456", "-p=23456", `"-p" "23456"`, "--port 23456 -p23456", "-- -p23456"}
 					invalid = []string{"-p0", "-p65536", "-p", "-pno", "--port 23456 -p23457", "-vp23456", "-vp=23456", "--bind 0.0.0.0", "--bind=::", "LMS_SERVER_HOST=0.0.0.0", "--cors=false", "--cors=true", "--cors=", "-- --bind 0.0.0.0"}
+				} else if name == "max" {
+					// MAX takes its port as a flag or env var and its bind
+					// address only from the environment — it registers no
+					// --host flag. It also ships no CORS middleware, so there
+					// is no browser-access policy to make editable; the absence
+					// of a cors control here is the reviewed answer, not an
+					// omission.
+					if !reflect.DeepEqual(policy.Controls, []LaunchControl{{Value: "{server.port}", Flags: []string{"--port"}, Env: []string{"MAX_SERVE_PORT"}}, {Value: "{server.host}", Env: []string{"MAX_SERVE_HOST"}}}) {
+						t.Fatal("incomplete MAX controls")
+					}
+					valid = []string{"--port 23456", "--port=23456", "MAX_SERVE_PORT=23456", `"--port" "23456"`}
+					invalid = []string{"--port 0", "--port 65536", "--port", "--port no", "MAX_SERVE_HOST=0.0.0.0", "MAX_SERVE_HOST=::", "MAX_SERVE_PORT=0", "--port 23456 --port 23457"}
 				} else {
 					if !reflect.DeepEqual(policy.Controls, []LaunchControl{{Value: "{server.host}:{server.port}", Env: []string{"OLLAMA_HOST"}}, {Value: "{cors.origins}", Env: []string{"OLLAMA_ORIGINS"}}}) {
 						t.Fatal("incomplete Ollama controls")

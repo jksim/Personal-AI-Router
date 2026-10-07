@@ -453,13 +453,81 @@ func TestBundledManifestsGolden(t *testing.T) {
 	if err := reg.LoadFS(bundledManifests, "manifests"); err != nil {
 		t.Fatalf("bundled manifests invalid: %v", err)
 	}
-	for _, want := range []string{"ollama", "lmstudio"} {
+	for _, want := range []string{"ollama", "lmstudio", "max"} {
 		m, ok := reg.Get(want)
 		if !ok {
 			t.Fatalf("missing bundled engine %q (have %v)", want, reg.Names())
 		}
 		if _, ok := m.Actions["list_models"]; !ok {
 			t.Errorf("bundled %q is missing the list_models action", want)
+		}
+	}
+	// Every bundled engine, not just the ones named above. A new manifest that
+	// nobody added to that list would otherwise ship with no model listing and
+	// no test saying so.
+	for _, name := range reg.Names() {
+		m, ok := reg.Get(name)
+		if !ok {
+			continue
+		}
+		if _, ok := m.Actions["list_models"]; !ok {
+			t.Errorf("bundled %q is missing the list_models action", name)
+		}
+	}
+}
+
+// TestBundledEnginesBindLoopback is the policy the manifests are written to and
+// no test enforced: a desktop engine must not listen on the LAN. Reaching an
+// engine from another node is the proxy's job, over cluster mTLS, and an engine
+// that binds a routable address bypasses that entirely.
+//
+// This deliberately covers every bundled engine rather than a named list, since
+// the engine most likely to get it wrong is the one added after the list.
+func TestBundledEnginesBindLoopback(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadFS(bundledManifests, "manifests"); err != nil {
+		t.Fatalf("bundled manifests invalid: %v", err)
+	}
+	for _, name := range reg.Names() {
+		m, ok := reg.Get(name)
+		if !ok {
+			continue
+		}
+		for key, p := range m.Platforms {
+			bind := p.Runtime.Bind
+			if bind == "" {
+				continue // empty means the runner's 127.0.0.1 default
+			}
+			if bind != "127.0.0.1" && bind != "localhost" && bind != "::1" {
+				t.Errorf("bundled %q platform %q binds %q, want loopback", name, key, bind)
+			}
+		}
+	}
+}
+
+// TestBundledReadinessBudgetsAreHonourable pins that no bundled engine declares
+// a readiness budget a remote caller could never wait out. The remote header
+// timeout is 11 minutes, so a budget above it is a promise the cluster cannot
+// keep: the peer would still be waiting when the initiator gave up.
+func TestBundledReadinessBudgetsAreHonourable(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.LoadFS(bundledManifests, "manifests"); err != nil {
+		t.Fatalf("bundled manifests invalid: %v", err)
+	}
+	const maxBudgetSeconds = int(remoteReadyResponseHeaderTimeout / time.Second)
+	for _, name := range reg.Names() {
+		m, ok := reg.Get(name)
+		if !ok {
+			continue
+		}
+		for key, p := range m.Platforms {
+			if p.Runtime.Ready == nil {
+				continue
+			}
+			if got := p.Runtime.Ready.TimeoutS; got > maxBudgetSeconds {
+				t.Errorf("bundled %q platform %q declares a %ds readiness budget, above the %ds a remote caller can wait",
+					name, key, got, maxBudgetSeconds)
+			}
 		}
 	}
 }

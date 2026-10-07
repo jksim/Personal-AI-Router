@@ -71,7 +71,7 @@ func applyLiteralLaunch(rt Runtime, command launchCommand, vars map[string]strin
 	if rt.LaunchArgs == nil {
 		return command, nil
 	}
-	command.Args = slices.Clone(p.FixedArgs)
+	command.Args = p.fixedArgs(rt)
 	for _, control := range p.Controls {
 		if value, managed := control.managedValue(vars["host"], vars["port"]); managed && control.flag() != "" {
 			command.Args = append(command.Args, control.flag(), value)
@@ -101,6 +101,12 @@ func launchForState(st *engineState, port int) (launchCommand, error) {
 	if rt.CLI != "" {
 		vars["cli"] = expandPath(rt.CLI)
 	}
+	// An engine that names its model in its launch args needs it here too, not
+	// only on the start path: this resolves the same strings to show the user
+	// what will run. Seeded even when nothing is selected, so the launch
+	// settings stay editable before a model is chosen — starting is what
+	// refuses an empty selection, not previewing it.
+	vars["model"] = rt.Model
 	st.mu.Lock()
 	bin := st.binPath
 	st.mu.Unlock()
@@ -312,10 +318,11 @@ func (e *Executor) previewLaunchLocked(st *engineState, request settings.Request
 	// Compatibility for journals created by the earlier full-command editor.
 	// New requests contain arguments only; no executable is editable.
 	if request.Format == "pair-launch-v1" {
-		if len(tokens) < 1+len(policy.FixedArgs) || tokens[0] != base.Bin || !slices.Equal(tokens[1:1+len(policy.FixedArgs)], policy.FixedArgs) {
+		fixed := policy.fixedArgs(st.plat.Runtime)
+		if len(tokens) < 1+len(fixed) || tokens[0] != base.Bin || !slices.Equal(tokens[1:1+len(fixed)], fixed) {
 			return fail("The saved command does not match this engine's startup command.")
 		}
-		tokens = tokens[1+len(policy.FixedArgs):]
+		tokens = tokens[1+len(fixed):]
 	} else if request.Format != "" && request.Format != launchTextFormat {
 		return fail("Unsupported engine argument format.")
 	}
@@ -412,7 +419,7 @@ func (e *Executor) ConfigureLaunch(ctx context.Context, p settings.Configure, re
 		}
 	}
 	if changed || !reflect.DeepEqual(st.plat.Runtime.LaunchArgs, &preview.Args) || !reflect.DeepEqual(st.plat.Runtime.LaunchEnv, &preview.Env) {
-		if err := e.persistRuntimeConfig(p.Engine, preview.Settings.ServerPort, &preview.Args, &preview.Env); err != nil {
+		if err := e.persistRuntimeConfig(p.Engine, preview.Settings.ServerPort, &preview.Args, &preview.Env, nil); err != nil {
 			return e.launchStateLocked(p.Engine, st), err
 		}
 	}

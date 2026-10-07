@@ -15,6 +15,39 @@ func lmstudioModelsDir() string {
 	return expandPath("~/.lmstudio/models")
 }
 
+// hfCacheDir is where the HuggingFace libraries put downloaded repos, which is
+// where a MAX model lives. HF_HOME wins over the default, matching the
+// libraries' own precedence, so a user who moved their cache is not told their
+// models are missing.
+//
+// The path is set explicitly rather than inferred because MAX's own docs
+// disagree about it, and a wrong guess here silently lists nothing.
+func hfCacheDir() string {
+	if home := strings.TrimSpace(os.Getenv("HF_HOME")); home != "" {
+		return filepath.Join(expandPath(home), "hub")
+	}
+	if cache := strings.TrimSpace(os.Getenv("HF_HUB_CACHE")); cache != "" {
+		return expandPath(cache)
+	}
+	return expandPath("~/.cache/huggingface/hub")
+}
+
+// engineModelsDir is the directory an engine's model actions operate on.
+//
+// This used to hand every engine LM Studio's directory, which was harmless only
+// because LM Studio was the sole engine with a path-based model action. A
+// second one made it wrong: MAX's models live in the HuggingFace cache, and a
+// remove_path rooted at ~/.lmstudio/models would either find nothing or, worse,
+// confine a delete to the wrong tree.
+func engineModelsDir(engine string) string {
+	switch engine {
+	case "max":
+		return hfCacheDir()
+	default:
+		return lmstudioModelsDir()
+	}
+}
+
 // safeRemoveUnderRoot deletes target after verifying it resolves under root.
 // Both paths are cleaned; symlinks on target are evaluated before the confinement
 // check so a path cannot escape the allowed root via symlink tricks.
