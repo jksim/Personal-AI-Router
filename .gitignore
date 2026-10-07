@@ -22,3 +22,8 @@ __pycache__/
 
 # Per-machine bookkeeping written by the Cursor agent hooks, not configuration.
 /.cursor/hooks/state/
+
+# A broker test that runs with no cluster dir mints this node's stable UUID next
+# to the module. It is a per-machine identity, not source, and must never be
+# committed — a shared node-id would make two installs claim the same node.
+node-id.json

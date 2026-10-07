@@ -8,6 +8,33 @@ SPDX-License-Identifier: Apache-2.0
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Security Policy](https://img.shields.io/badge/security-policy-green.svg)](SECURITY.md)
 
+> ### This is an unofficial fork
+>
+> This repository is a personal fork of
+> [NVIDIA/Personal-AI-Router](https://github.com/NVIDIA/Personal-AI-Router).
+> It is **not affiliated with, endorsed by, or supported by NVIDIA Corporation.**
+> NVIDIA, the NVIDIA logo, and NVIDIA product names are trademarks of NVIDIA
+> Corporation; they are used here only to identify the upstream project this work
+> derives from, and no trademark rights are claimed or granted (Apache-2.0 §6).
+>
+> **Do not report issues with this fork to NVIDIA.** Use this repository's issue
+> tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
+>
+> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a managed
+> engine alongside Ollama and LM Studio: PAIR installs it, supervises it, lists
+> and selects its models, and routes inference to it across the cluster with the
+> same model-aware routing, failover and mTLS. Linux x86-64.
+>
+> This is early — one engine, one platform, verified on one machine, which is
+> why the version is below 1.0.
+>
+> Vendor-neutral accelerator support, and Qualcomm Cloud AI 100 via
+> [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic), are developed on a
+> separate branch and are not part of this release line.
+>
+> Upstream code remains under its original copyright and the Apache-2.0 licence.
+> Files first written in this fork carry the fork author's copyright.
+
 NVIDIA Personal AI Router (PAIR), shown as **NVIDIA PAIR** once installed, is a
 local inference router for a group of compatible computers on the same network. It discovers participating nodes,
 manages supported inference engines, and presents local proxy endpoints for
@@ -38,7 +65,7 @@ one, and both report live GPU and memory use throughout.
 | **Architectures** | x64 and arm64 on all three. Windows on ARM is experimental. |
 | **Installers** | Windows `.exe`; Linux `.deb`; macOS `.dmg`. On other Linux distributions, [build from source](docs/building.mdx). |
 | **Mixing nodes** | Windows, Linux, and macOS nodes can all be paired with each other |
-| **Inference engines** | Ollama and LM Studio |
+| **Inference engines** | Ollama, LM Studio, and Modular MAX — all installed and managed by PAIR. MAX is Linux x86-64 only (it needs AVX2 and glibc 2.34+), and PAIR installs it into its own self-contained environment rather than changing your system Python. |
 
 **PAIR running on a machine does not mean an engine will.** PAIR itself runs on
 any supported Windows, Linux, or macOS machine. Each engine sets its own requirements
