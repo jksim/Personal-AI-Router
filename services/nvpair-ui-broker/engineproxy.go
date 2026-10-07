@@ -167,6 +167,12 @@ func buildEngineProxyProfiles() []engineProxyProfile {
 		// LM Studio is the one engine engine-manager may move while running:
 		// its identified command-mode runtime has an official stop command.
 		"lmstudio": {Ownership: managedEngine, HealthProbePath: "/v1/models"},
+		// MAX runs in process mode with a signal stop, not an identified
+		// command-mode runtime, and a listener on its facade port may be a
+		// `max serve` the user started. The broker cannot tell that apart from
+		// its own, so it never repositions a running one. Its /health is a real
+		// readiness gate rather than a liveness side effect of the model list.
+		"max": {Ownership: adoptedEngine, HealthProbePath: "/health"},
 	}
 	out := make([]engineProxyProfile, 0, len(engines.All()))
 	for _, e := range engines.All() {
@@ -616,4 +622,53 @@ func planManagedEnginePorts(p engineProxyProfile, enabled bool, st ollamaPortSta
 		return managedPortPlan{Blocked: "no free backend port is available"}
 	}
 	return managedPortPlan{Enabled: true, BackendPort: backend}
+}
+
+// engineFacadeSpec asks for an engine's facade on the port the broker has
+// planned for it, or lets the proxy use its persisted one when nothing is
+// planned yet.
+//
+// This is lmstudioFacadeSpec with the profile as a parameter. It was written
+// per engine, so an engine without its own copy could not be brought up at all:
+// enableEngineFacade refused with "no facade spec for engine", the proxy exited
+// because no facade came up, and the engine looked simply absent.
+func (b *Broker) engineFacadeSpec(p engineProxyProfile) enableFacadeRequest {
+	spec := enableFacadeRequest{Engine: p.Name}
+	if port := int(b.engineProxy(p).startupPort.Load()); port != 0 {
+		spec.Port = port
+		spec.IgnorePersistedPort = true
+	}
+	return spec
+}
+
+// setEngineProxyFallback picks a free port for an engine's facade, avoiding the
+// OLLAMA_HOST alias, every sibling facade, and the engine's own backend.
+func (b *Broker) setEngineProxyFallback(p engineProxyProfile, excludedPorts ...int) int {
+	if aliasPort := b.currentOllamaHostAlias().Port; aliasPort > 0 {
+		excludedPorts = append(excludedPorts, aliasPort)
+	}
+	for port := range b.siblingEngineProxyPorts(p) {
+		excludedPorts = append(excludedPorts, port)
+	}
+	if backend := int(b.engineProxy(p).backendPort.Load()); backend > 0 {
+		excludedPorts = append(excludedPorts, backend)
+	} else {
+		// With no authoritative backend yet, neither the engine's compatibility
+		// port nor its bundled backend default is safe evidence of a free proxy
+		// port.
+		excludedPorts = append(excludedPorts, p.FacadePort, p.EnginePortBase)
+	}
+	fallback := nextAvailablePortExcluding(p.EnginePortBase, excludedPorts, tcpPortAvailable)
+	b.engineProxy(p).startupPort.Store(int32(fallback))
+	return fallback
+}
+
+// engineProxyFallbackPort prefers the port a bind-failed notification already
+// chose, since that path also decides whether the managed facade stays in play,
+// and recomputes only if it did not run.
+func (b *Broker) engineProxyFallbackPort(p engineProxyProfile, failed int) int {
+	if planned := int(b.engineProxy(p).startupPort.Load()); planned != 0 && planned != failed {
+		return planned
+	}
+	return b.setEngineProxyFallback(p, failed)
 }

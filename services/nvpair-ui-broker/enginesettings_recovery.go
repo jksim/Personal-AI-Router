@@ -73,17 +73,19 @@ func (b *Broker) prepareExplicitEngineSettings(engine string) bool {
 		return false
 	}
 	profile, _ := engineProxyProfileFor(engine)
-	b.engineProxy(profile).explicitSettings.Store(true)
+	// This engine's own state. Branching on the name wrote LM Studio's for
+	// anything that was not Ollama, so a third engine's restored ports landed
+	// on LM Studio and its own were never set at all.
+	state := b.engineProxy(profile)
+	state.explicitSettings.Store(true)
+	state.managedFacade.Store(false)
+	state.backendPort.Store(int32(config.ServerPort))
+	state.startupPort.Store(int32(config.ProxyPort))
 	if engine == "ollama" {
-		b.ollamaState().managedFacade.Store(false)
+		// Genuinely Ollama's alone: it is the only engine with an inherited
+		// host variable for the proxy alias to stand in for.
 		b.managedOllamaBackend.Store(0)
-		b.ollamaState().backendPort.Store(int32(config.ServerPort))
-		b.ollamaState().startupPort.Store(int32(config.ProxyPort))
 		b.syncCurrentEngineOllamaHostAliasReservation()
-	} else {
-		b.lmstudioState().managedFacade.Store(false)
-		b.lmstudioState().backendPort.Store(int32(config.ServerPort))
-		b.lmstudioState().startupPort.Store(int32(config.ProxyPort))
 	}
 	return true
 }

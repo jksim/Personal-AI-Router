@@ -75,7 +75,7 @@ func TestLMStudioFallbackNeverAdvertisesItsProxy(t *testing.T) {
 
 	// A nil client is intentional: collision detection must short-circuit before
 	// any health request can mistake the proxy for LM Studio.
-	b.reconcileAdvertiseLMStudio(nil)
+	b.reconcileAdvertiseEngine(lmstudioProxyProfile, nil)
 	if got := b.regCache.Snapshot(); len(got) != 0 {
 		t.Fatalf("LM Studio proxy was advertised as an engine: %+v", got)
 	}
@@ -100,7 +100,7 @@ func TestLMStudioFallbackDoesNotOverwriteKnownBackend(t *testing.T) {
 
 	// No engine-manager and no proxy: the fallback path that used to poison
 	// the cache with defaultLMStudioPort.
-	b.reconcileAdvertiseLMStudio(nil)
+	b.reconcileAdvertiseEngine(lmstudioProxyProfile, nil)
 
 	if got := int(b.lmstudioState().backendPort.Load()); got != managedLMStudioBackendStart {
 		t.Fatalf("backend cache = %d, want %d (fallback must not overwrite the confirmed backend)", got, managedLMStudioBackendStart)

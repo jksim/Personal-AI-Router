@@ -159,18 +159,27 @@ func (b *Broker) settingsWorkerCall(ctx context.Context, method string, params a
 	return nil
 }
 
+// settingsProxy resolves the proxy process serving an engine's facade.
+//
+// One nvpair-proxy hosts every facade, so this is the same process whichever
+// engine is named; the per-engine handle is how the broker tracks readiness.
+// Resolving through the shared table rather than naming engines is what lets a
+// new engine have launch settings at all — the old form returned nil for
+// anything but the two it listed, which reads as "proxy unavailable".
 func (b *Broker) settingsProxy(engine string) *proxyProcess {
-	if engine == "ollama" {
-		return b.getProxy()
+	profile, ok := engineProxyProfileFor(engine)
+	if !ok {
+		return nil
 	}
-	if engine == "lmstudio" {
-		return b.getLMStudioProxy()
-	}
-	return nil
+	return b.engineProxyHandle(profile)
 }
 
 func (b *Broker) settingsSnapshotLocked(ctx context.Context, engine string) (settings.Snapshot, error) {
-	if engine != "ollama" && engine != "lmstudio" {
+	// Whether an engine has editable launch settings is the manifest's answer,
+	// and engine-manager gives it below ("This engine does not support launch
+	// settings"). Duplicating it as a name list here only excluded engines that
+	// do support them.
+	if _, ok := engineProxyProfileFor(engine); !ok {
 		return settings.Snapshot{}, fmt.Errorf("this engine does not support settings")
 	}
 	if err := b.loadEngineSettingsLocked(); err != nil {
@@ -261,7 +270,7 @@ func (b *Broker) validateSettingsPortsLocked(ctx context.Context, engine string,
 	// Include every registered PAIR listener, including services added later.
 	if b.regCache != nil {
 		for _, service := range b.regCache.Snapshot() {
-			if service.Port > 0 && service.Service != noderec.ServiceOllama && service.Service != noderec.ServiceLMStudio {
+			if service.Port > 0 && !isEngineDiscoveryService(service.Service) {
 				reserved[service.Port] = true
 			}
 		}
@@ -350,10 +359,11 @@ func (b *Broker) runSettingsOperationLocked(ctx context.Context, engine string, 
 	if err := b.migrateSettingsArgumentsLocked(ctx, engine, record); err != nil {
 		return err
 	}
-	service := noderec.ServiceOllama
-	if engine == "lmstudio" {
-		service = noderec.ServiceLMStudio
+	profile, ok := engineProxyProfileFor(engine)
+	if !ok {
+		return fmt.Errorf("unknown engine %q", engine)
 	}
+	service := profile.DiscoveryService
 	if b.regCache != nil {
 		b.unregisterService(service)
 	}
@@ -398,10 +408,8 @@ func (b *Broker) runSettingsOperationLocked(ctx context.Context, engine string, 
 		record.Snapshot.EffectiveServerPort = launch.EffectivePort
 		record.Snapshot.Editable = launch.Editable
 		record.Snapshot.Reason = launch.Reason
-		if engine == "ollama" {
-			b.ollamaState().backendPort.Store(int32(launch.EffectivePort))
-		} else {
-			b.lmstudioState().backendPort.Store(int32(launch.EffectivePort))
+		if profile, ok := engineProxyProfileFor(engine); ok {
+			b.engineProxy(profile).backendPort.Store(int32(launch.EffectivePort))
 		}
 	}
 	proxyReady := false
@@ -684,11 +692,9 @@ func (b *Broker) rebindSettingsProxy(engine string, port int) error {
 	// explicit rebind. The accepted journal restores these choices after restart.
 	profile, _ := engineProxyProfileFor(engine)
 	b.engineProxy(profile).explicitSettings.Store(true)
-	if engine == "ollama" {
-		b.ollamaState().managedFacade.Store(false)
-	} else {
-		b.lmstudioState().managedFacade.Store(false)
-	}
+	// This engine's facade, not a guess between two: naming engines here
+	// cleared LM Studio's takeover flag for any engine that was not Ollama.
+	b.engineProxy(profile).managedFacade.Store(false)
 	_, rpcErr, err := p.Call(context.Background(), engine+":set-port", settingsJSON(map[string]int{"port": port}))
 	if err != nil {
 		return err
@@ -696,12 +702,12 @@ func (b *Broker) rebindSettingsProxy(engine string, port int) error {
 	if rpcErr != nil {
 		return fmt.Errorf("%s", rpcErr.Message)
 	}
-	if engine == "ollama" {
-		b.ollamaState().managedFacade.Store(false)
-		b.ollamaState().startupPort.Store(int32(port))
-	} else {
-		b.lmstudioState().managedFacade.Store(false)
-		b.lmstudioState().startupPort.Store(int32(port))
+	// This engine's state. The name branch this replaces recorded the port
+	// against LM Studio for every engine that was not Ollama.
+	if profile, ok := engineProxyProfileFor(engine); ok {
+		state := b.engineProxy(profile)
+		state.managedFacade.Store(false)
+		state.startupPort.Store(int32(port))
 	}
 	return nil
 }
@@ -739,4 +745,16 @@ func (b *Broker) refreshEngineSettings(ctx context.Context) {
 			}()
 		}
 	}
+}
+
+// isEngineDiscoveryService reports whether a registration is an engine facade.
+// Those ports belong to the engine whose settings are being applied, so they
+// are not reserved against it.
+func isEngineDiscoveryService(service noderec.ServiceKey) bool {
+	for _, profile := range engineProxyProfiles {
+		if profile.DiscoveryService == service {
+			return true
+		}
+	}
+	return false
 }

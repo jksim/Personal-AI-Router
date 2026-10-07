@@ -134,6 +134,13 @@ var lmStudioBaseRoutes = []route{
 	{Path: "/v1/models", Role: roleModelListOpenAIGET},
 }
 
+// maxBaseRoutes is the engine-specific surface MAX exposes before the shared
+// compatibility routes are added. MAX serves the OpenAI API and nothing of its
+// own, so this is just the model list.
+var maxBaseRoutes = []route{
+	{Path: "/v1/models", Role: roleModelListOpenAIGET},
+}
+
 // openAIInferenceRoutes is the OpenAI-compatible inference surface.
 var openAIInferenceRoutes = []route{
 	{Path: "/v1/chat/completions", Role: roleInferencePOST},
@@ -151,8 +158,14 @@ var profiles = buildProfiles()
 func buildProfiles() []engineProfile {
 	ollama, _ := engines.ByName("ollama")
 	lmstudio, _ := engines.ByName("lmstudio")
+	max, _ := engines.ByName("max")
 	ollamaRoutes := slices.Concat(ollamaBaseRoutes, openAIInferenceRoutes, anthropicInferenceRoutes)
 	lmStudioRoutes := slices.Concat(lmStudioBaseRoutes, openAIInferenceRoutes, anthropicInferenceRoutes)
+	// No anthropicInferenceRoutes: MAX registers /chat/completions,
+	// /completions, /embeddings, /models, /responses and /health, and nothing
+	// at /v1/messages. Routing a path the engine answers with a 404 would make
+	// the proxy look like the failure.
+	maxRoutes := slices.Concat(maxBaseRoutes, openAIInferenceRoutes)
 
 	return []engineProfile{
 		{
@@ -172,6 +185,15 @@ func buildProfiles() []engineProfile {
 			// proxy that restored it would sit on the engine's own port. The
 			// stored value predates the current default of 1234.
 			ReservedPersistedPort: 1235,
+		},
+		{
+			Engine:         max,
+			StandalonePort: 8000,
+			Routes:         maxRoutes,
+			ModelNaming:    exactID,
+			// 8001 is where engine-manager runs a managed MAX, so a proxy that
+			// restored it would sit on the engine's own port.
+			ReservedPersistedPort: 8001,
 		},
 	}
 }

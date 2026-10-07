@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"nvpair-shared/httpcon"
@@ -127,43 +128,55 @@ func (b *Broker) ollamaFacadeIsPendingBackend() bool {
 	return b.ollamaState().managedFacade.Load() || b.proxyListenPort() == managedOllamaFacadePort
 }
 
-// runAutoAdvertiseLMStudio is the LM Studio sibling of runAutoAdvertise: it
-// polls the local LM Studio server and reconciles this node's lm service
-// registration against it, so an LM Studio host appears on the cluster the same
-// way an Ollama host does. Kept parallel to the Ollama path rather than folded
-// into it: the two are a deliberate temporary pair, to be unified when the
-// proxies are.
-func (b *Broker) runAutoAdvertiseLMStudio(ctx context.Context) {
+// runAutoAdvertiseEngines runs the advertise loop for every engine except
+// Ollama, whose OLLAMA_HOST alias handling keeps it on its own path. It blocks
+// until ctx is done.
+func (b *Broker) runAutoAdvertiseEngines(ctx context.Context) {
+	var wg sync.WaitGroup
+	for _, profile := range engineProxyProfiles {
+		if profile.Name == ollamaProxyProfile.Name {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			b.runAutoAdvertiseEngine(ctx, profile)
+		}()
+	}
+	wg.Wait()
+}
+
+func (b *Broker) runAutoAdvertiseEngine(ctx context.Context, profile engineProxyProfile) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	ticker := time.NewTicker(autoAdvertiseInterval)
 	defer ticker.Stop()
 
-	b.reconcileAdvertiseLMStudio(client)
+	b.reconcileAdvertiseEngine(profile, client)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			b.reconcileAdvertiseLMStudio(client)
+			b.reconcileAdvertiseEngine(profile, client)
 		}
 	}
 }
 
-// reconcileAdvertiseLMStudio brings this node's lm registration into line with
-// the local LM Studio server, mirroring reconcileAdvertise: it advertises the
-// promoted proxy port (never the engine) and hands the engine's loopback port to
-// the LM Studio proxy via node/set-local-backend.
-func (b *Broker) reconcileAdvertiseLMStudio(client *http.Client) {
+// reconcileAdvertiseEngine brings this node's registration for one engine into
+// line with the local engine, mirroring reconcileAdvertise: it advertises the
+// proxy's facade port (never the engine) and hands the engine's loopback port to
+// the proxy via node/set-local-backend.
+func (b *Broker) reconcileAdvertiseEngine(profile engineProxyProfile, client *http.Client) {
 	b.engineConfigMu.Lock()
 	defer b.engineConfigMu.Unlock()
-	enginePort, probe := b.localEnginePort("lmstudio", defaultLMStudioPort)
-	proxyPort := b.lmstudioProxyListenPort()
+	enginePort, probe := b.localEnginePort(profile.Name, profile.FacadePort)
+	proxyPort := b.engineProxyListenPort(profile)
 	if proxyPort != 0 && enginePort == proxyPort {
 		// engine-manager may be temporarily unavailable after managed setup.
 		// Prefer the last confirmed backend, but never hand the proxy its own
 		// listener as a local destination.
-		if cached := int(b.lmstudioState().backendPort.Load()); cached > 0 && cached != proxyPort {
+		if cached := int(b.engineProxy(profile).backendPort.Load()); cached > 0 && cached != proxyPort {
 			enginePort = cached
 		} else {
 			enginePort = 0
@@ -172,19 +185,18 @@ func (b *Broker) reconcileAdvertiseLMStudio(client *http.Client) {
 	}
 	// enginePort may be a stock-port fallback: localEnginePort returns one when
 	// engine-manager is unavailable, and it is indistinguishable from a real
-	// status here. Use it to advertise this tick only; never write it to
-	// lmstudioBackendPort. That cache's authoritative owners are the managed
-	// facade setup and live engine:status. Promoting the fallback poisons the
-	// cache while the proxy and engine restart together (as on the first invite),
-	// which later makes the compatibility proxy on the facade port look like the
-	// backend and wrongly disables managed mode.
-	up := probe && proxyPort != 0 && enginePort != proxyPort && checkEngineHealth(lmstudioProxyProfile, client, enginePort)
+	// status here. Use it to advertise this tick only; never write it to the
+	// backendPort cache, whose authoritative owners are the managed facade setup
+	// and live engine:status. Promoting the fallback poisons the cache while the
+	// proxy and engine restart together, which later makes the compatibility
+	// proxy on the facade port look like the backend.
+	up := probe && proxyPort != 0 && enginePort != proxyPort && checkEngineHealth(profile, client, enginePort)
 	if up {
-		b.registerService(noderec.RegisterParams{Service: noderec.ServiceLMStudio, Port: proxyPort})
-		b.setProxyLocalBackend(b.getLMStudioProxy(), "lmstudio", enginePort, true)
+		b.registerService(noderec.RegisterParams{Service: profile.DiscoveryService, Port: proxyPort})
+		b.setProxyLocalBackend(b.engineProxyHandle(profile), profile.Name, enginePort, true)
 	} else {
-		b.unregisterService(noderec.ServiceLMStudio)
-		b.setProxyLocalBackend(b.getLMStudioProxy(), "lmstudio", enginePort, false)
+		b.unregisterService(profile.DiscoveryService)
+		b.setProxyLocalBackend(b.engineProxyHandle(profile), profile.Name, enginePort, false)
 	}
 }
 

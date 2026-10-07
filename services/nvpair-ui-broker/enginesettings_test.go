@@ -38,7 +38,9 @@ type settingsHarness struct {
 
 func newSettingsHarness(t *testing.T) *settingsHarness {
 	t.Helper()
-	ports := make([]int, 3)
+	// One spare port plus one per engine, so the harness covers whatever the
+	// shared engine table holds rather than the two it was written for.
+	ports := make([]int, 1+len(engineProxyProfiles))
 	listeners := []net.Listener{}
 	for i := range ports {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -55,12 +57,16 @@ func newSettingsHarness(t *testing.T) *settingsHarness {
 	worker, codec := newTestRPCWorkerPipe(t)
 	h.b.setEngineMgr(worker)
 	proxyWorker, proxyCodec := newTestRPCWorkerPipe(t)
-	proxy := &proxyProcess{peer: proxyWorker.peer, facadeState: map[string]proxyFacadeState{
-		"ollama":   {ready: true, port: ports[1]},
-		"lmstudio": {ready: true, port: ports[2]},
-	}}
-	h.b.setProxy(proxy)
-	h.b.setLMStudioProxy(proxy)
+	facades := make(map[string]proxyFacadeState, len(engineProxyProfiles))
+	for i, profile := range engineProxyProfiles {
+		facades[profile.Name] = proxyFacadeState{ready: true, port: ports[i+1]}
+	}
+	proxy := &proxyProcess{peer: proxyWorker.peer, facadeState: facades}
+	// One process serves every facade, so every engine's handle is the same
+	// object. Set them from the table so a new engine is not left handle-less.
+	for _, profile := range engineProxyProfiles {
+		h.b.setEngineProxyHandle(profile, proxy)
+	}
 	go func() {
 		for {
 			msg, err := proxyCodec.Read()
@@ -70,7 +76,12 @@ func newSettingsHarness(t *testing.T) *settingsHarness {
 			if !msg.IsRequest() {
 				continue
 			}
-			if msg.Method != "ollama:set-port" && msg.Method != "lmstudio:set-port" {
+			// "<engine>:set-port" for any engine in the table, rather than the
+			// two this fixture once knew: a set-port it does not recognise is
+			// answered ok and silently changes nothing, which reads as a
+			// rebind that did not take.
+			engine, _, found := strings.Cut(msg.Method, ":set-port")
+			if _, known := engineProxyProfileFor(engine); !found || !known {
 				_ = proxyCodec.Respond(msg.ID, map[string]bool{"ok": true})
 				continue
 			}
@@ -79,10 +90,6 @@ func newSettingsHarness(t *testing.T) *settingsHarness {
 			}
 			_ = json.Unmarshal(msg.Params, &p)
 			proxy.readyMu.Lock()
-			engine := "ollama"
-			if msg.Method == "lmstudio:set-port" {
-				engine = "lmstudio"
-			}
 			proxy.facadeState[engine] = proxyFacadeState{ready: true, port: p.Port}
 			proxy.readyMu.Unlock()
 			_ = proxyCodec.Respond(msg.ID, map[string]int{"port": p.Port})

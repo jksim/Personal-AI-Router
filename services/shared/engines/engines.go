@@ -143,6 +143,14 @@ var all = []Engine{
 		EnginePortBase:   1235,
 		PortFile:         "lmstudio-proxy-port.json",
 	},
+	{
+		Name:             "max",
+		DisplayName:      "MAX",
+		DiscoveryService: noderec.ServiceMax,
+		FacadePort:       8000,
+		EnginePortBase:   8001,
+		PortFile:         "max-proxy-port.json",
+	},
 }
 
 // All returns the engine set in preparation order. The result is a copy, so a

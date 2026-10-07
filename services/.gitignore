@@ -34,3 +34,11 @@ build/bin/
 # Local caches
 .cache/
 .npm/
+
+# Stray `go build` output. Running `go build ./...` inside a module leaves a
+# binary named after it; three were committed by a `git add -A`. Upstream
+# deleted the per-engine proxy directories, so these guard the names a stale
+# checkout can still leave behind.
+max-proxy/max-proxy
+ollama-proxy/ollama-proxy
+lmstudio-proxy/lmstudio-proxy
