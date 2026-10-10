@@ -97,7 +97,7 @@ On startup — **before** emitting `app:ready` — the broker spawns the scanner
 **`nvpair-node-info`** is spawned next. It's a server, not an event source: it stands up the local `/v1/node-info` HTTP endpoint (GPU/CPU/memory inventory). It does not advertise itself — the broker registers its `ni` port with the scanner daemon, which carries it in the node record, and a peer's daemon fetches `/v1/node-info` over plain HTTP to enrich the node. The broker doesn't read anything back from node-info's stdout (drained and discarded). Spawning it is **optional**: if the binary can't be resolved (and no `--node-info-path` override was given) the broker logs a warning and continues serving discovery without it.
 
 **Engine advertising.** The broker runs an internal 5 s poll loop against local
-Ollama (`GET /`), LM Studio (`GET /v1/models`), and llama.cpp (`GET /health`)
+Ollama (`GET /`), LM Studio (`GET /v1/models`), llama.cpp (`GET /health`), and MAX (`GET /health`)
 at their configured backend ports and reconciles this node's engine registration
 with the scanner daemon:
 
@@ -160,7 +160,7 @@ Two classes of proxy notification are **not** re-emitted under any
 telemetry, and discovery snapshot. It smooths fresh utilization into pressure
 0–3, uses neutral pressure 1 for invalid/missing/older-than-10-second samples,
 and orders by `pending + gpuPressure`, then pressure, then stable UUID. Load is
-node-wide across Ollama, LM Studio, and llama.cpp because they normally contend
+node-wide across Ollama, LM Studio, llama.cpp, and MAX because they normally contend
 for the same resources. Each engine-specific `schedule:priority` carries
 `{engine,nodes,ranks}` and refreshes when order, pending counts, or pressure
 changes. The broker caches, generation-orders, and replays the full
@@ -326,7 +326,7 @@ Field-by-field:
 | `trusted` | bool | whether this node is a paired cluster peer (the daemon holds a pin for its `cluster-uuid`); false for non-cluster/unknown nodes. |
 | `clustered` | bool | whether this node belongs to some cluster (it advertises a `cluster-uuid`), independent of whether we're paired with it (`trusted`). A client uses it to suppress a cluster invite that an already-clustered peer would reject. Omitted (false) for standalone/unknown nodes. |
 | `models` | string[] | the node's available model names, enriched by the daemon from the node's engine-manager `em` endpoint (`GET /v1/models`). Omitted when the node advertises no engine-manager or no engine is running. |
-| `modelsByEngine` | object | the same models attributed to the engine that serves each (keyed by engine name, e.g. `ollama` / `lmstudio`). Additive alongside the flat `models` union. A present engine key with `[]` means its inventory was successfully queried and is empty; a missing key means it was not running/queryable. Omitted when no engine inventory was successfully reported. |
+| `modelsByEngine` | object | the same models attributed to the engine that serves each (keyed by engine name, e.g. `ollama` / `lmstudio` / `max`). Additive alongside the flat `models` union. A present engine key with `[]` means its inventory was successfully queried and is empty; a missing key means it was not running/queryable. Omitted when no engine inventory was successfully reported. |
 | `loadedByEngine` | object | the models currently **loaded in memory** for each engine (normally a subset of `modelsByEngine`), keyed by engine name. Enriched from the peer's `loadedByEngine`. An engine key with an empty list means "running, nothing loaded"; a missing key means loaded state wasn't reported. Omitted when no engine reports loaded state. |
 
 A node that the scanner reports as removed is deleted from the snapshot; `lastSeen` is not preserved for removed nodes. The response is wrapped in `{nodes: [...]}` (rather than a bare array) so we can grow summary fields later without breaking clients. An empty list is a normal early-startup state, not an error.
@@ -446,6 +446,10 @@ The LM Studio counterpart of the `ollama-proxy:*` surface runs the supervised `l
 
 The same broker-local status, subscription, and port-setting methods apply to `llamacpp-proxy:*`. llama.cpp port changes use the same validation, journal, and application path; remaining methods use the generic facade relay, with `llamacpp-proxy:shutdown` refused.
 
+#### `max-proxy:get-status` / `max-proxy:subscribe` / `max-proxy:unsubscribe` / `max-proxy:<method>` (generic relay)
+
+The MAX facade of the same `nvpair-proxy` process, on compatibility port `:8000` with the managed MAX engine on `:8001`. The broker answers `get-status`, the subscription methods and `set-port` for every engine from one handler parameterised by the engine, so this surface is the LM Studio one with the prefix changed. MAX is *adopted* rather than moved: a listener already on `:8000` may be a user's own `max serve`, so the broker plans around it instead of relocating it.
+
 #### `ollama-proxy:subscribe`
 
 Opts the peer into the `ollama-proxy:<event>` stream (off by default). On a fresh subscription the broker immediately replays the proxy's last `ready` payload as a baseline `ollama-proxy:ready` (if the proxy has come up), so a subscriber learns the port without a separate `ollama-proxy:get-status`.
@@ -540,7 +544,7 @@ Any `settings/*` request is forwarded to `nvpair-node-settings` and its response
 
 Relayed to `nvpair-manual-nodes`. `node/add` (`{ address, name?, tls_port?, mtls? }`) registers a user-added node and probes it; `node/remove` (`{ id }`) drops it; `nodes/list` returns the tracked manual nodes. Manually added nodes also surface in the shared `discovery:get-nodes` / `discovery:nodes-changed` snapshot — the broker merges `nvpair-manual-nodes`' `node/discovered|updated|removed` into the same store the scanner feeds. A `nvpair-manual-nodes` restart loses the in-memory entries because neither that worker nor the broker persists an authoritative copy, so clients must re-add manual nodes after a restart. Error `-32000 "manual-nodes not available"` when no manual-nodes worker is supervised.
 
-**Manual → proxy bridge.** When the broker supervises both `nvpair-manual-nodes` and a proxy, it also bridges a manual node whose engine is reachable into that proxy via `node/add-manual` (host/port from the node's per-engine status), so inference can route to it through `ollama-proxy:node/select` / `lmstudio-proxy:node/select` just like a relay-discovered node. This is per-engine: a node whose `ollama_*` status is up is bridged into `ollama-proxy` (host/port from `ollama_port`), and one whose `lmstudio_*` status is up into `lmstudio-proxy` (from `lmstudio_port`) — a node running both is bridged into both. Manual nodes are by definition the ones that never appear via the daemon's `_nvpair-node` discovery, so this explicit add is what makes them routable. The bridge tracks reachability: an engine that goes down (or a node that is removed, or whose prober crashes) is pulled back out with `node/remove-manual`. A proxy that isn't supervised → that leg is a no-op; manual nodes still appear in the discovery snapshot as before.
+**Manual → proxy bridge.** When the broker supervises both `nvpair-manual-nodes` and a proxy, it also bridges a manual node whose engine is reachable into that proxy via `node/add-manual` (host/port from the node's per-engine status), so inference can route to it through `ollama-proxy:node/select` / `lmstudio-proxy:node/select` / `max-proxy:node/select` just like a relay-discovered node. This is per-engine: a node whose `ollama_*` status is up is bridged into `ollama-proxy` (host/port from `ollama_port`), one whose `lmstudio_*` status is up into `lmstudio-proxy` (from `lmstudio_port`), and one whose `max_*` status is up into `max-proxy` (from `max_port`) — a node running several is bridged into each. Manual nodes are by definition the ones that never appear via the daemon's `_nvpair-node` discovery, so this explicit add is what makes them routable. The bridge tracks reachability: an engine that goes down (or a node that is removed, or whose prober crashes) is pulled back out with `node/remove-manual`. A proxy that isn't supervised → that leg is a no-op; manual nodes still appear in the discovery snapshot as before.
 
 #### `cluster:<method>` / `nodes:<method>` (generic relay)
 
@@ -617,8 +621,8 @@ Attach to a pre-existing endpoint:
 ## What this version intentionally does NOT do (yet)
 
 - **Engine-advertise control surface.** Engine registration is auto-driven only:
-  the broker tracks local Ollama, LM Studio, and llama.cpp and registers `ol`,
-  `lm`, or `lc` with the daemon while each is up. There's no manual-advertise
+  the broker tracks local Ollama, LM Studio, llama.cpp, and MAX and registers `ol`,
+  `lm`, `lc`, or `mx` with the daemon while each is up. There's no manual-advertise
   RPC (custom service, port, name, or TXT), and no way to advertise anything
   other than the detected engines.
 - **node-info control surface.** node-info is spawned and torn down with the broker, and the broker pushes it only two things over stdin: the log level, and this node's cluster principal (`nodeinfo:set-cluster-identity`, sent on spawn and on every membership or pin-set change, because node-info holds no cluster dir and so cannot read membership itself). Otherwise it's hands-off: the broker registers its port with the daemon (which enriches over plain HTTP) but doesn't pass through TLS material (`--cert` / `--key` / `--client-ca`) or a custom `--port`, and exposes no RPC to query or reconfigure it. It runs with its own defaults plus those two pushes.

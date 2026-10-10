@@ -35,6 +35,11 @@ occupied. The desktop and TUI expose its managed lifecycle, downloads,
 inventory, and load/unload actions. `--proxy-engines` can still restrict the
 facades a standalone broker or TUI starts.
 
+The MAX facade is enabled by default as well, on `http://localhost:8000`, with
+the managed `max serve` on `8001`. MAX is Linux x86-64 only and serves one model
+per process, so engine-manager treats choosing a model as launch configuration:
+a load relaunches the engine onto it, and works while the engine is stopped.
+
 PAIR ships a graphical UI alongside these services. The UI launches
 **`nvpair-ui-broker`** from the same directory; the broker orchestrates the
 workers and exposes a newline-delimited JSON-RPC 2.0 API over stdio (or a Unix
@@ -70,7 +75,7 @@ configuration.
 
 The broker feeds every accepted local or peer workload transition plus compact
 GPU telemetry to the scheduler. Queued and running work is counted by destination
-node across Ollama, LM Studio, and llama.cpp together. Fresh maximum-GPU
+node across Ollama, LM Studio, llama.cpp, and MAX together. Fresh maximum-GPU
 utilization is smoothed into pressure 0–3; missing or stale telemetry is
 neutral. Rankings use `pending + gpuPressure`, and each facade adds local
 reservations before choosing, so bursts spread without waiting for workload

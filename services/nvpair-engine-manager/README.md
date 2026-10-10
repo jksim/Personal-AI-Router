@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # nvpair-engine-manager
 
 A config-driven control plane for local inference engines. The bundled
-manifests support Ollama, LM Studio, and llama.cpp. It manages everything about
+manifests support Ollama, LM Studio, llama.cpp, and MAX. It manages everything about
 an engine **except serving inference**: detect, user-mode install,
 start/stop/restart, health, and config-declared actions. Adding an engine
 is a JSON manifest, not code.
@@ -334,7 +334,11 @@ matching how `nvpair-errors` and `nvpair-workload-manager` handle their own
 cluster traffic. Managed engines bind **loopback by default**, but a manifest's
 `runtime.bind` may open an inference engine to the LAN — Ollama ships
 `0.0.0.0` to serve the cluster — overridable per call via
-`engine:start {bind}`; readiness/health probes always target loopback.
+`engine:start {bind}`; readiness/health probes always target loopback. An
+engine that takes its bind address from the environment rather than a flag
+(MAX reads `MAX_SERVE_HOST` and defaults to `0.0.0.0`) sets it in
+`runtime.env`, which is why a managed engine's working directory is pinned:
+a stray `.env` beside it could otherwise put it back on the LAN.
 Downloads are **HTTPS-only** (plain `http` only from loopback) and verified
 against the manifest's `sha256` when one is pinned; an unpinned fetch runs
 with a loud warning.

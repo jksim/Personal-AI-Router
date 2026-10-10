@@ -34,7 +34,7 @@ history.
 | Cluster pairing            | Complete                        | PIN pairing, identity, membership, leave, and removal                                                                                           |
 | Cluster transport security | Backend-owned                   | Node-to-node transport security, including the proxies' cluster-mTLS inference ingress, is entirely backend; Personal AI Router implements none |
 | Settings                   | Partial                         | Cluster identity plus per-engine ports and engine arguments, local and remote; inert backend settings are not surfaced                            |
-| Model catalog search       | Backend-owned                   | `engine:catalog` serves the locked Ollama list and the cached LM Studio and llama.cpp catalogs, and searches Hugging Face for llama.cpp         |
+| Model catalog search       | Backend-owned                   | `engine:catalog` serves the locked Ollama and MAX lists and the cached LM Studio and llama.cpp catalogs, and searches Hugging Face for llama.cpp |
 
 ## Supervision
 
@@ -341,8 +341,8 @@ safety-net timeout (`pending-actions.store.ts`). Loaded state carries no
 name-set, not structured details.
 
 The model catalogue is owned by the backend: `engine:catalog` on
-`nvpair-engine-manager` serves the curated Ollama, LM Studio, and llama.cpp
-lists, and searches Hugging Face for llama.cpp, and both the desktop app and
+`nvpair-engine-manager` serves the curated Ollama, LM Studio, llama.cpp, and
+MAX lists, and searches Hugging Face for llama.cpp, and both the desktop app and
 the terminal interface browse it. Electron only relays the call and maps rows
 for the renderer.
 

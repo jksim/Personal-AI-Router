@@ -99,8 +99,8 @@ They do not imply a WebSocket connection. Browser clients are not supported.
 - `onSettingsDisconnected(callback)` reports that a node's settings authority
   became unreachable, so its cached snapshot is stale.
 
-`EngineType` currently includes `ollama`, `lm-studio`, and `llama-cpp`.
-`searchHub(engineType, query?)` serves Ollama's locked local catalog and cached
+`EngineType` currently includes `ollama`, `lm-studio`, `llama-cpp`, and `max`.
+`searchHub(engineType, query?)` serves the locked Ollama and MAX catalogs and cached
 live Hugging Face catalogs for LM Studio and llama.cpp. A non-empty llama.cpp
 query performs an explicit bounded search across public Hugging Face GGUF
 repositories; other calls return the populated engine catalog. llama.cpp pull
@@ -204,7 +204,7 @@ Commands return no state. Renderer stores update from
 - update check, download, install, and status;
 - the node-local Inference Demo (`inferenceDemo.getState()` / `start()` / `stop()`
   and the `demo:state` push). `start()` rejects if a demo is already running on
-  this node or if no Ollama, LM Studio, or llama.cpp proxy exposed a
+  this node or if no Ollama, LM Studio, llama.cpp, or MAX proxy exposed a
   text-generation model; callers show that as an ordinary error banner. Demo
   state is not synchronized across nodes.
 
@@ -212,8 +212,10 @@ Commands return no state. Renderer stores update from
 typed in `IpcPushChannelMap` (`shared/types/ipc-channels.ts`) instead of the
 logical push table above.
 
-Service status remains `connecting` until both the broker and required Ollama
-proxy report ready. `ServiceStatus.error` carries the latest startup or runtime
+Service status remains `connecting` until the broker reports `app:ready`. The
+engine proxies are asynchronous capabilities and do not gate it — a late or
+failed proxy must not be reported as a failed startup (see
+[architecture.md](architecture.md)). `ServiceStatus.error` carries the latest startup or runtime
 failure; successful readiness and deliberate stops clear it, which is how a
 crash is told apart from a stop the user asked for.
 

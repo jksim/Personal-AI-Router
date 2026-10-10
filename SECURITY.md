@@ -8,6 +8,13 @@ SPDX-License-Identifier: Apache-2.0
 NVIDIA is dedicated to the security and trust of its software products and
 services, including source code repositories managed through its organization.
 
+> **Fork notice.** This repository is an unofficial fork of
+> [NVIDIA/Personal-AI-Router](https://github.com/NVIDIA/Personal-AI-Router) and is not
+> maintained by NVIDIA. **Report vulnerabilities in code specific to this fork to this
+> repository's maintainer, not to NVIDIA PSIRT.** The NVIDIA contacts below apply only
+> to vulnerabilities you have confirmed also exist in unmodified upstream PAIR; when in
+> doubt, report here first and the maintainer will escalate upstream if warranted.
+
 **Do not report security vulnerabilities through public GitHub issues or pull
 requests.** If someone discloses a potential vulnerability publicly, maintainers
 may limit public discussion and redirect the reporter to a private channel.
