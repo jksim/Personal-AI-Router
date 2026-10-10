@@ -116,6 +116,8 @@ func (c *backendClient) listModels(ctx context.Context) ([]RegisteredModel, erro
 		models, err = c.listLMStudioModels(ctx)
 	case "llamacpp":
 		models, err = c.listLlamaCPPModels(ctx)
+	case "max":
+		models, err = c.listOpenAIModels(ctx)
 	default:
 		models, err = c.listOllamaModels(ctx)
 	}
@@ -180,6 +182,17 @@ func (c *backendClient) listOllamaModels(ctx context.Context) ([]RegisteredModel
 // The OpenAI list carries no type or capability fields, which the generation
 // filter needs, so the native list is still consulted and merged in by name.
 // Whatever it reports describes the same model wherever it is loaded.
+// listOpenAIModels reads the OpenAI model list and nothing else. MAX has no
+// native listing to fall back to: through PAIR's proxy, /v1/models is the
+// fleet's MAX inventory.
+func (c *backendClient) listOpenAIModels(ctx context.Context) ([]RegisteredModel, error) {
+	data, err := c.request(ctx, http.MethodGet, "/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	return parseOpenAIModels(data)
+}
+
 func (c *backendClient) listLMStudioModels(ctx context.Context) ([]RegisteredModel, error) {
 	openAIData, openAIErr := c.request(ctx, http.MethodGet, "/v1/models", nil)
 	var models []RegisteredModel
@@ -359,7 +372,7 @@ func (c *backendClient) inferencePath() string {
 }
 
 func (c *backendClient) usesOpenAIProtocol() bool {
-	return c.cfg.Backend == "lmstudio" || c.cfg.Backend == "llamacpp"
+	return c.cfg.Backend == "lmstudio" || c.cfg.Backend == "llamacpp" || c.cfg.Backend == "max"
 }
 
 func (c *backendClient) infer(ctx context.Context, model, prompt string) (string, error) {

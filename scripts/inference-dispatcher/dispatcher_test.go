@@ -403,6 +403,20 @@ func TestLlamaCPPDefaultPort(t *testing.T) {
 	}
 }
 
+func TestMaxDefaultPortAndProtocol(t *testing.T) {
+	var stderr bytes.Buffer
+	cfg, err := parseConfig([]string{"--backend", "max"}, &stderr)
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	if port := effectivePort(cfg); port != 8000 {
+		t.Fatalf("MAX default port=%d, want 8000", port)
+	}
+	if !(&backendClient{cfg: cfg}).usesOpenAIProtocol() {
+		t.Fatal("MAX serves the OpenAI API only")
+	}
+}
+
 func TestResponseTextNeverReachesStdout(t *testing.T) {
 	const secret = "the capital of France is Paris"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

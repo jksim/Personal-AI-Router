@@ -50,7 +50,8 @@ const POISONED_ENV: Record<string, string> = {
 const proxyPorts: Record<EngineType, number | null> = {
     ollama: 11434,
     'lm-studio': 1234,
-    'llama-cpp': 8080
+    'llama-cpp': 8080,
+    max: 8000
 }
 
 /** Model inventory each probe returns. Mutable so a test can return none. */
@@ -130,7 +131,7 @@ import {
 } from '@/electron/inference-demo'
 
 /** Ports the demo is allowed to target: proxy facades only. */
-const PROXY_FACADE_PORTS = [11434, 1234, 8080]
+const PROXY_FACADE_PORTS = [11434, 1234, 8080, 8000]
 
 function portOf(record: SpawnRecord): number {
     return Number(record.args[record.args.indexOf('--port') + 1])
@@ -227,6 +228,21 @@ describe('inference demo lifecycle', () => {
         const llamaCPPRequest = spawned.find(child => backendOf(child) === 'llamacpp')
         expect(llamaCPPRequest).toBeDefined()
         if (llamaCPPRequest) expect(portOf(llamaCPPRequest)).toBe(8080)
+    })
+
+    it('probes and schedules MAX through its proxy facade', async () => {
+        await startInferenceDemo()
+        await vi.advanceTimersByTimeAsync(12_000)
+
+        expect(
+            probeArgs.some(
+                args =>
+                    args[args.indexOf('--backend') + 1] === 'max' && args.includes('--list-models')
+            )
+        ).toBe(true)
+        const maxRequest = spawned.find(child => backendOf(child) === 'max')
+        expect(maxRequest).toBeDefined()
+        if (maxRequest) expect(portOf(maxRequest)).toBe(8000)
     })
 
     it('skips an engine whose proxy has not reported a port', async () => {

@@ -16,18 +16,25 @@ import { gatewayEndpointDisplayUrl } from '@/ui/utils/gateway-inference-paths'
 
 describe('engine identity', () => {
     it('enables llama.cpp workflows on every platform', () => {
-        expect(EngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp'])
-        expect(EnabledEngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp'])
+        expect(EngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp', 'max'])
+        expect(EnabledEngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp', 'max'])
         expect(getWelcomeEngineCandidates('Windows')).toContain('llama-cpp')
         expect(getWelcomeEngineCandidates('MacOS')).toContain('llama-cpp')
         expect(getWelcomeEngineCandidates('Linux')).toContain('llama-cpp')
     })
 
-    it('preselects every engine during onboarding', () => {
+    it('offers MAX only where PAIR can install it', () => {
+        expect(getWelcomeEngineCandidates('Linux')).toContain('max')
+        expect(getWelcomeEngineCandidates('Windows')).not.toContain('max')
+        expect(getWelcomeEngineCandidates('MacOS')).not.toContain('max')
+    })
+
+    it('preselects every engine but the opt-in MAX during onboarding', () => {
         expect(WELCOME_ENGINE_DEFAULT_SELECTED).toEqual({
             ollama: true,
             'lm-studio': true,
-            'llama-cpp': true
+            'llama-cpp': true,
+            max: false
         })
     })
 
