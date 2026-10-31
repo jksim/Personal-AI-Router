@@ -20,17 +20,21 @@ SPDX-License-Identifier: Apache-2.0
 > **Do not report issues with this fork to NVIDIA.** Use this repository's issue
 > tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
 >
-> **What this fork adds.** [Modular MAX](https://www.modular.com/) as a managed
-> engine alongside Ollama, LM Studio and llama.cpp: PAIR installs it, supervises
-> it, lists and selects its models, and routes inference to it across the
-> cluster with the same model-aware routing, failover and mTLS. Linux x86-64.
+> **What this fork adds.** The current release, v0.7.1, is PAIR 1.0.0 with two
+> additions:
 >
-> This is early — one engine, one platform, verified on one machine, which is
-> why the version is below 1.0.
+> - **[Modular MAX](https://www.modular.com/) as a managed engine,** beside
+>   Ollama, LM Studio and llama.cpp. PAIR installs it, supervises it, lists and
+>   selects its models, and routes inference to it across the cluster with the
+>   same model-aware routing, failover and mTLS. Linux x86-64 only.
+> - **Qualcomm Cloud AI 100 detection.** PAIR reports an AI 100 card, with its
+>   memory, load, temperature and power, to every node in the cluster, beside the
+>   node's GPUs. Linux only, because Qualcomm's `qaic` driver is Linux-only. PAIR
+>   does not run models on the AI 100 yet; a Qualcomm engine is in development.
 >
-> Vendor-neutral accelerator support, and Qualcomm Cloud AI 100 via
-> [`vllm-qaic`](https://github.com/qualcomm/vllm-qaic), are developed on a
-> separate branch and are not part of this release line.
+> The fork's version numbers are its own: 0.7.1 contains upstream 1.0.0. The
+> release was tested on a Windows 11 node and an Ubuntu 24.04 node with an
+> RTX A4500 and an AI 100 Ultra, in one cluster.
 >
 > Upstream code remains under its original copyright and the Apache-2.0 licence.
 > Files first written in this fork carry the fork author's copyright.
@@ -62,10 +66,11 @@ one, and both report live GPU and memory use throughout.
 | | |
 | --- | --- |
 | **Operating systems** | Windows 11; Linux; macOS |
-| **Architectures** | x64 and arm64 on all three. Windows on ARM is experimental. |
-| **Installers** | Windows `.exe`; Linux `.deb`; macOS `.dmg`. On other Linux distributions, [build from source](docs/building.mdx). |
+| **Architectures** | x64 and arm64 on all three. Windows on ARM is experimental. This fork's releases are x64 only. |
+| **Installers** | This fork's releases: Windows x64 `.exe` and Linux x64 `.deb`. For macOS, arm64 and other Linux distributions, [build from source](docs/building.mdx). |
 | **Mixing nodes** | Windows, Linux, and macOS nodes can all be paired with each other |
 | **Inference engines** | Ollama, LM Studio, llama.cpp, and Modular MAX — all installed and managed by PAIR. MAX is Linux x86-64 only (it needs AVX2 and glibc 2.34+), and PAIR installs it into its own self-contained environment rather than changing your system Python. |
+| **Accelerators** | GPUs, as upstream PAIR reports them, and on Linux the Qualcomm Cloud AI 100. PAIR reports an AI 100 only after it answers a status request, so a card that failed to start is not shown. To read the card, your user needs access to `/dev/accel/*`; see the [node-info reference](services/nvpair-node-info/README.md). |
 
 **PAIR running on a machine does not mean an engine will.** PAIR itself runs on
 any supported Windows, Linux, or macOS machine. Each engine sets its own requirements
@@ -87,32 +92,40 @@ with no desktop — but neither is the ordinary way in. Those are covered in
 
 ### Download a release
 
-A released installer is signed, sets up the background services and the desktop
-application together, and adds the firewall rules PAIR needs on Windows. It also
-tells you when a newer release exists and installs it on your say-so from
-**Settings → Service**. A build you make yourself is unsigned and checks no
-update feed, so you would upgrade it by pulling and rebuilding.
+A released installer sets up the background services and the desktop
+application together, and on Windows it adds the firewall rules PAIR needs and
+the Microsoft Visual C++ runtime.
 
-Download PAIR from the
-[GitHub releases page](https://github.com/NVIDIA/Personal-AI-Router/releases).
-Release downloads include:
+This fork's installers are **not code-signed**, and they check no update feed.
+Watch the fork's releases page for new versions.
 
-- a Windows installer;
-- a Debian package for Linux; and
-- a macOS disk image.
+Download PAIR from this fork's
+[releases page](https://github.com/jksim/Personal-AI-Router/releases). Each
+release includes:
 
-**On Windows and macOS,** double-click the download and follow the installer's
-usual prompts — on macOS that means dragging **NVIDIA PAIR** to your
-**Applications** folder.
+- `NVPAIR-Setup-<version>-x64.exe`, the Windows x64 installer;
+- `NVPAIR-Setup-<version>-amd64.deb`, the Linux x64 package; and
+- `SHA256SUMS.txt`. Check your download against it.
+
+The fork uses the same app ID and data folder as official PAIR. Installing it
+**replaces** an official PAIR install, and keeps its settings and cluster.
+
+**On Windows,** run the installer.
+
+1. SmartScreen shows "Windows protected your PC", because the installer is not
+   signed. Select **More info**, then **Run anyway**.
+2. User Account Control asks about an app "from an unknown publisher". Select
+   **Yes**.
+3. When PAIR first starts, Windows asks to allow `nvpair-ui-broker` on the
+   network. Select **Allow**.
 
 **On Linux,** install the package from the directory you downloaded it into:
 
 ```bash
-sudo apt install ./NVPAIR-Setup-*.deb
+sudo apt install ./NVPAIR-Setup-0.7.1-amd64.deb
 ```
 
-If you have kept more than one PAIR package in that directory, install the one
-you want by its full filename instead.
+This also upgrades an installed official PAIR package.
 
 ### Run it
 
@@ -128,7 +141,8 @@ you want by its full filename instead.
 
 - **Get an engine running.** On the node's card, open **Engine settings** and
   select **Install** next to Ollama, LM Studio, llama.cpp, or MAX (Linux x86-64). PAIR downloads and
-  sets the engine up for you, so nothing needs to be in place beforehand.
+  sets the engine up for you, so nothing needs to be in place beforehand. The
+  first-start wizard preselects Ollama, LM Studio and llama.cpp, but not MAX.
 
   ![The Install engines dialog with Ollama downloading, reporting progress as it installs.](docs/assets/onboarding/engine-lifecycle/01-engine-installing.png)
 
@@ -178,7 +192,7 @@ The reply is ordinary OpenAI-shaped JSON, abbreviated here:
 }
 ```
 
-If you changed a port, or you are using LM Studio or llama.cpp rather than
+If you changed a port, or you are using LM Studio, llama.cpp or MAX rather than
 Ollama, copy the URL from **Endpoints → API endpoints** instead of assuming the
 one above.
 
@@ -225,7 +239,8 @@ Your data means settings, logs, cluster identity and certificates, and any engin
 PAIR installed for you. An engine the uninstaller cannot remove — one still
 holding a file open, say — is left in place rather than stopping the uninstall;
 remove it with its own uninstaller. **Model weights are not touched** — they live in the
-engine's own storage (`~/.ollama`, `~/.llamacpp`, `~/.lmstudio/models`), so
+engine's own storage (`~/.ollama`, `~/.llamacpp`, `~/.lmstudio/models`, and
+MAX's `~/.cache/huggingface`), so
 removing PAIR does not delete the models you downloaded. Delete those through the
 engine, or by removing its directory. An engine you installed yourself is also
 left alone.
@@ -293,12 +308,25 @@ Component references, for when you already know what you are looking for:
 
 ## Releases
 
-See the [releases page](https://github.com/NVIDIA/Personal-AI-Router/releases)
-for what changed in each release.
+See this fork's [releases page](https://github.com/jksim/Personal-AI-Router/releases)
+for what changed in each fork release, its known issues and what it was tested
+on. Upstream's changes are in
+[NVIDIA's releases](https://github.com/NVIDIA/Personal-AI-Router/releases) and
+the [Release notes](docs/release-notes.mdx).
+
+Known issues in v0.7.1:
+
+- The terminal interface says "PAIR 1.0.0 is available". This build already
+  contains 1.0.0, so ignore the notice.
+- **Settings → Service** shows "Error checking for updates", because the fork's
+  builds have no update feed.
+- If another program uses port 8000, PAIR moves MAX's proxy to the next free
+  port. Copy MAX's URL from **Endpoints → API endpoints**.
 
 ## Roadmap
 
-These are features we want to add to PAIR. This list is a direction for the
+This is upstream PAIR's roadmap. This fork follows upstream, and adds only what
+the fork notice at the top describes. The list is NVIDIA's direction for the
 project, not a commitment to delivery or implementation order. Community
 feedback and contributions will help shape priorities.
 
@@ -331,13 +359,13 @@ feedback and contributions will help shape priorities.
 - [x] Configure engine launch options and environment variables from PAIR.
 - [ ] Stability and reliability improvements informed by real-world use.
 
-Have a feature request or a workflow you want PAIR to support? Open an
-[issue](https://github.com/NVIDIA/Personal-AI-Router/issues) and tell us how you
-would use it.
+Feature requests for upstream PAIR go to
+[NVIDIA's issues](https://github.com/NVIDIA/Personal-AI-Router/issues). Requests
+for MAX or the AI 100 go to [this fork's issues](https://github.com/jksim/Personal-AI-Router/issues).
 
 ## Development Team
 
-NVIDIA team members working on PAIR:
+NVIDIA team members working on upstream PAIR. They do not maintain this fork.
 
 | Name | GitHub | Role |
 | --- | --- | --- |
