@@ -191,6 +191,9 @@ func (e *Executor) doStart(ctx context.Context, st *engineState, engine string, 
 		}
 		vars["model"] = rt.Model
 	}
+	if err := e.qaicGate(engine, rt.Model); err != nil {
+		return err
+	}
 
 	st.mu.Lock()
 	st.port = port

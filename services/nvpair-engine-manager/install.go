@@ -33,6 +33,10 @@ func (e *Executor) Install(ctx context.Context, engine string) error {
 		e.emitInstallProgress(engine, "already-installed", 100)
 		return nil
 	}
+	if err := e.qaicGate(engine, ""); err != nil {
+		e.reportInstallFailed(engine, err)
+		return err
+	}
 	st.mu.Lock()
 	port := st.port
 	st.mu.Unlock()

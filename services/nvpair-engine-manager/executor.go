@@ -80,6 +80,9 @@ type engineState struct {
 // layer runs the long ones (install, start) in goroutines so the read
 // loop stays responsive.
 type Executor struct {
+	// qaicHost checks whether this host can run the Qualcomm engine.
+	qaicHost func() (qaicHostReady, []qaicHostProblem)
+
 	settingsHub      settings.Hub
 	settingsParent   func(context.Context, string, settings.Request, string) (json.RawMessage, error)
 	reg              *Registry
@@ -133,6 +136,7 @@ type Executor struct {
 
 func NewExecutor(reg *Registry, reporter *Reporter, emit func(string, any), baseDir string) *Executor {
 	return &Executor{
+		qaicHost:            checkQAICHostNow,
 		reg:                 reg,
 		reporter:            reporter,
 		emit:                emit,
