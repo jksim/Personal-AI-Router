@@ -106,11 +106,6 @@ func TestGroupQAICCardsUltraIsOneCard(t *testing.T) {
 	if card.NspTotal != 64 || card.NspFree != 60 {
 		t.Fatalf("card NSP = %d/%d, want summed 60/64", card.NspFree, card.NspTotal)
 	}
-	// One of sixteen groups of four busy: 4/64.
-	load := card.Load()
-	if !load.Valid || load.Fraction != 4.0/64.0 {
-		t.Fatalf("card load = %+v, want 4/64 across the whole card", load)
-	}
 }
 
 // TestGroupQAICCardsSeparatesDistinctSerials keeps two physically separate
@@ -150,8 +145,8 @@ func TestGroupQAICCardsWithoutStatusStaysUngrouped(t *testing.T) {
 		if card.Grouped {
 			t.Fatalf("card %+v claims to be grouped without a serial", card)
 		}
-		if load := card.Load(); load.Valid {
-			t.Fatalf("card without status reported a valid load %+v", load)
+		if card.answered() {
+			t.Fatalf("card without status claims to have answered: %+v", card)
 		}
 	}
 }

@@ -48,20 +48,9 @@ type qaicCard struct {
 	NspFree     int
 }
 
-// Load is occupancy across the whole card.
-//
-// A card nothing answered for reports invalid rather than idle: the scheduler
-// treats an idle node as a preferred target, so guessing here sends real work
-// to hardware whose state is unknown.
-func (c qaicCard) Load() Load {
-	if c.NspTotal == 0 {
-		return Load{}
-	}
-	free := c.NspFree
-	if free > c.NspTotal {
-		free = c.NspTotal
-	}
-	return Load{Fraction: float64(c.NspTotal-free) / float64(c.NspTotal), Valid: true}
+// answered reports whether any SoC of the card returned its status.
+func (c qaicCard) answered() bool {
+	return c.DramTotalKB > 0
 }
 
 // mapAccelNodes returns PCI address -> accel device node name, read from

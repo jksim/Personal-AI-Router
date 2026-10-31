@@ -207,14 +207,16 @@ func (c *statsCollector) sampleAccelerators(out map[string]gpuStat) bool {
 			continue
 		}
 		for _, sample := range samples {
-			if sample.StatsKey == "" || !sample.Load.Valid {
+			if sample.StatsKey == "" || (!sample.Load.Valid && sample.MemoryUsedBytes == 0) {
 				continue
 			}
-			out[sample.StatsKey] = gpuStat{
-				VRAMUsed:       sample.MemoryUsedBytes,
-				UtilizationPct: uint32(math.Round(sample.Load.Fraction * 100)),
+			stat := gpuStat{VRAMUsed: sample.MemoryUsedBytes}
+			// Only a measured load sets utilization or validates telemetry.
+			if sample.Load.Valid {
+				stat.UtilizationPct = uint32(math.Round(sample.Load.Fraction * 100))
+				usable = true
 			}
-			usable = true
+			out[sample.StatsKey] = stat
 		}
 	}
 	return usable

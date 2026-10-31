@@ -140,3 +140,29 @@ func TestSampleAcceleratorsNoSamplers(t *testing.T) {
 		t.Fatal("no samplers produced a usable sample")
 	}
 }
+
+// TestSampleAcceleratorsKeepsMemoryWithoutLoad covers a card that reports its
+// memory use but no load, as an AI 100 does. The memory figure is published.
+// Utilization is not, and the sample does not count as usable telemetry,
+// because nothing measured how busy the card is.
+func TestSampleAcceleratorsKeepsMemoryWithoutLoad(t *testing.T) {
+	c := &statsCollector{samplers: []accel.Sampler{&fakeSampler{
+		name: "qaic",
+		samples: []accel.DeviceSample{{
+			StatsKey:        "qaic:serial:ULTRA-0001",
+			MemoryUsedBytes: 55 << 30,
+		}},
+	}}}
+
+	out := map[string]gpuStat{}
+	if c.sampleAccelerators(out) {
+		t.Fatal("a sample with no load counted as usable telemetry")
+	}
+	stat, ok := out["qaic:serial:ULTRA-0001"]
+	if !ok {
+		t.Fatalf("memory sample not published: %v", out)
+	}
+	if stat.VRAMUsed != 55<<30 || stat.UtilizationPct != 0 {
+		t.Fatalf("stat = %+v, want 55 GiB used and no utilization", stat)
+	}
+}

@@ -96,35 +96,14 @@ type qaicStatus struct {
 	DramTotalKB uint32
 	DramFreeKB  uint32
 
-	// NspTotal and NspFree are neural signal processor counts. Each NSP runs
-	// one workload at a time, which makes their ratio a real occupancy
-	// measure rather than a sampled percentage.
+	// NspTotal and NspFree are neural signal processor counts. NspFree counts
+	// NSPs that no loaded program has reserved. A loaded program reserves its
+	// NSPs while it is loaded, busy or idle, so the counts are not a load.
 	NspTotal uint8
 	NspFree  uint8
 
 	SkuType uint8
 	SkuName string
-}
-
-// Load derives occupancy from NSP counts.
-//
-// The Qualcomm stack exposes no utilization percentage anywhere — not in
-// qaic-util, not in its Prometheus exporter — so nothing here is a reading of
-// one. A device reporting no NSPs cannot produce a ratio and reports invalid
-// rather than claiming to be idle, because "unknown" and "idle" send work to
-// very different places.
-func (s qaicStatus) Load() Load {
-	if s.NspTotal == 0 {
-		return Load{}
-	}
-	free := s.NspFree
-	if free > s.NspTotal {
-		// Nonsense from the device; treat as fully free rather than
-		// producing a negative occupancy.
-		free = s.NspTotal
-	}
-	busy := float64(s.NspTotal-free) / float64(s.NspTotal)
-	return Load{Fraction: busy, Valid: true}
 }
 
 // encodeStatusRequest builds the STATUS_REQ transaction.

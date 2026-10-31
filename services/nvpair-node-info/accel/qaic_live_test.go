@@ -123,10 +123,10 @@ func TestLiveQAICStatusDecode(t *testing.T) {
 			continue
 		}
 		decoded++
-		t.Logf("%s: serial=%q sku=%q dram=%d/%d KB nsp=%d/%d load=%.3f",
+		t.Logf("%s: serial=%q sku=%q dram=%d/%d KB nsp free=%d/%d",
 			soc.BDF, status.BoardSerial, status.SkuName,
 			status.DramFreeKB, status.DramTotalKB,
-			status.NspFree, status.NspTotal, status.Load().Fraction)
+			status.NspFree, status.NspTotal)
 
 		if status.BoardSerial == "" {
 			t.Errorf("%s: empty board serial; cards cannot be grouped without it", soc.BDF)
@@ -191,8 +191,7 @@ func TestLiveQAICSourceReportsOneCardPerBoard(t *testing.T) {
 		t.Fatalf("Sample: %v", err)
 	}
 	for _, sample := range samples {
-		t.Logf("sample: key=%s load=%.3f used=%d MB",
-			sample.StatsKey, sample.Load.Fraction, sample.MemoryUsedBytes/(1024*1024))
+		t.Logf("sample: key=%s used=%d MB", sample.StatsKey, sample.MemoryUsedBytes/(1024*1024))
 	}
 	if len(samples) == 0 {
 		t.Error("no samples produced; telemetry will not validate for this node")

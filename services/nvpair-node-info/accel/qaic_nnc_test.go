@@ -87,50 +87,21 @@ func TestDecodeStatusResponse(t *testing.T) {
 	}
 }
 
-// TestDecodeStatusResponseNspOccupancy pins the load signal itself. The
-// Qualcomm stack exposes no utilization percentage anywhere, so occupancy is
-// derived from NSP counts: each NSP runs one workload at a time.
-func TestDecodeStatusResponseNspOccupancy(t *testing.T) {
-	cases := []struct {
-		name      string
-		total     byte
-		free      byte
-		wantLoad  float64
-		wantValid bool
-	}{
-		{name: "idle", total: 16, free: 16, wantLoad: 0, wantValid: true},
-		{name: "quarter busy", total: 16, free: 12, wantLoad: 0.25, wantValid: true},
-		{name: "saturated", total: 16, free: 0, wantLoad: 1, wantValid: true},
-		// A device reporting no NSPs at all cannot produce a ratio. It must
-		// report invalid rather than dividing by zero or claiming idle.
-		{name: "no nsps reported", total: 0, free: 0, wantValid: false},
-		// Free above total is nonsense; clamp rather than emit a negative.
-		{name: "free exceeds total", total: 8, free: 12, wantLoad: 0, wantValid: true},
+// TestDecodeStatusResponseNspCounts pins the decoded NSP counts. They are
+// reported as decoded; they are not turned into a load.
+func TestDecodeStatusResponseNspCounts(t *testing.T) {
+	status, err := decodeStatusResponse(statusResponseFixture(func(b []byte) {
+		b[offNspTotal] = 16
+		b[offNspFree] = 0
+	}))
+	if err != nil {
+		t.Fatalf("decodeStatusResponse() error = %v", err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			status, err := decodeStatusResponse(statusResponseFixture(func(b []byte) {
-				b[offNspTotal] = c.total
-				b[offNspFree] = c.free
-			}))
-			if err != nil {
-				t.Fatalf("decodeStatusResponse() error = %v", err)
-			}
-			load := status.Load()
-			if load.Valid != c.wantValid {
-				t.Fatalf("load.Valid = %v, want %v", load.Valid, c.wantValid)
-			}
-			if c.wantValid && load.Fraction != c.wantLoad {
-				t.Fatalf("load = %v, want %v", load.Fraction, c.wantLoad)
-			}
-		})
+	if status.NspTotal != 16 || status.NspFree != 0 {
+		t.Fatalf("nsp = %d/%d, want 0 free of 16", status.NspFree, status.NspTotal)
 	}
 }
 
-// TestDecodeStatusResponseBoardSerialNotTerminated covers a documented device
-// behaviour: the serial field is a fixed 32 bytes and the device does not
-// always NUL-terminate it. Reading past the field would splice the compiler
-// version onto the end of the serial, and the serial is the key cards are
 // grouped by.
 func TestDecodeStatusResponseBoardSerialNotTerminated(t *testing.T) {
 	full := strings.Repeat("A", 32)

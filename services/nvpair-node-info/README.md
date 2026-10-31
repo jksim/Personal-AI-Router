@@ -114,7 +114,7 @@ tooling being absent never hides another's hardware.
 | Source | Finds | Needs |
 | ------ | ----- | ----- |
 | `nvidia-smi` | NVIDIA GPUs, with VRAM and a stable UUID | `nvidia-smi` on `PATH` |
-| `qaic` | Qualcomm Cloud AI accelerators | sysfs only to enumerate; a readable device node to report memory and occupancy |
+| `qaic` | Qualcomm Cloud AI accelerators | sysfs only to enumerate; a readable device node to report memory |
 | ghw | Display adapters, names only | nothing |
 
 Devices are reported with `vendor`, `kind` and a stable `device_id`, and the
@@ -125,13 +125,12 @@ about compute capability.
 
 ### Qualcomm accelerators
 
-Enumeration needs nothing privileged. Reading a card's memory and occupancy
-means opening its `/dev/accel/*` node, which is `root:root` mode `0600` by
+Enumeration needs nothing privileged. Reading a card's memory means opening its `/dev/accel/*` node, which is `root:root` mode `0600` by
 default, so an unprivileged service sees the hardware but no telemetry. The card
 is still reported — a card visible in `lspci` should not vanish from the UI
 because of a permissions problem — but without a board serial its SoCs cannot be
-grouped, so a multi-SoC card appears as several devices and contributes no
-occupancy reading.
+grouped, so a multi-SoC card appears as several devices and reports no memory
+use.
 
 To grant access, install a udev rule such as:
 
@@ -148,8 +147,12 @@ with its resources summed. Grouping is by board serial only: SoCs of one card do
 share an upstream PCIe switch, but so do two separate cards in adjacent slots,
 and merging those would report one card with double the capacity.
 
-Occupancy comes from NSP counts — each NSP runs one workload at a time — because
-the Qualcomm stack exposes no utilization percentage anywhere. Temperature and
+A Qualcomm card reports **no utilization**. The Qualcomm stack has no busy counter.
+The status query's free-NSP count shows NSPs that no loaded program has reserved, and
+a loaded program reserves its NSPs while it is loaded, busy or idle. Reporting that
+as load showed an idle card with a model loaded as 100 % busy. A node's scheduling
+pressure therefore comes from its other devices; a node whose only accelerator is an
+AI 100 reports no valid telemetry and stays at neutral pressure. Temperature and
 power are read from hwmon when present, which in practice means only when the
 out-of-tree Qualcomm kernel module is installed; the in-tree driver creates no
 hwmon nodes. An unavailable sensor is reported as unavailable, never as zero.

@@ -3,7 +3,7 @@
   "services": "0.7.1",
   "components": {
     "nvpair-proxy": "1.5.0",
-    "nvpair-node-info": "0.14.0",
+    "nvpair-node-info": "0.14.1",
     "nvpair-node-scanner": "0.21.0",
     "nvpair-manual-nodes": "0.13.0",
     "nvpair-workload-manager": "0.15.0",

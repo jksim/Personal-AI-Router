@@ -61,8 +61,8 @@ func TestQAICSourceReportsOneCard(t *testing.T) {
 	if device.StatsKey != "qaic:serial:ULTRA-0001" {
 		t.Fatalf("stats key = %q, want the board serial", device.StatsKey)
 	}
-	if !device.Load.Valid || device.Load.Fraction != 0 {
-		t.Fatalf("load = %+v, want a valid idle reading", device.Load)
+	if device.Load.Valid {
+		t.Fatalf("load = %+v, want none: the Qualcomm stack has no busy counter", device.Load)
 	}
 }
 
@@ -111,25 +111,38 @@ func TestQAICSourceUnreadableDevicesStillReportHardware(t *testing.T) {
 	}
 }
 
-// TestQAICSourceLoadReflectsBusyNSPs checks the load signal survives the whole
-// path, not just the decoder.
-func TestQAICSourceLoadReflectsBusyNSPs(t *testing.T) {
-	busy := func(string) (qaicStatus, error) {
+// TestQAICSourceReportsNoLoadWhenModelLoaded reproduces the reading taken on
+// 2026-10-31 with Qualcomm's vLLM serving a 4-SoC QPC and the card idle: every
+// SoC reports all 16 NSPs reserved. Reserved is not busy, so the card must
+// report no load at all, while its memory use is still sampled.
+func TestQAICSourceReportsNoLoadWhenModelLoaded(t *testing.T) {
+	loaded := func(string) (qaicStatus, error) {
 		return qaicStatus{
-			BoardSerial: "ULTRA-0001", DramTotalKB: 31391744, DramFreeKB: 15695872,
-			NspTotal: 16, NspFree: 8, SkuName: "PCIe Ultra",
+			BoardSerial: "ULTRA-0001", DramTotalKB: 31391744, DramFreeKB: 17858364,
+			NspTotal: 16, NspFree: 0, SkuName: "PCIe Ultra",
 		}, nil
 	}
-	source := &qaicSource{sysfsRoot: ultraFixture(t), devRoot: "/dev/accel", query: busy}
+	source := &qaicSource{sysfsRoot: ultraFixture(t), devRoot: "/dev/accel", query: loaded}
 
 	devices, err := source.Detect(context.Background())
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
-	if len(devices) != 1 {
-		t.Fatalf("got %d devices, want 1", len(devices))
+	if len(devices) != 1 || devices[0].Load.Valid {
+		t.Fatalf("devices = %+v, want one card with no load", devices)
 	}
-	if load := devices[0].Load; !load.Valid || load.Fraction != 0.5 {
-		t.Fatalf("load = %+v, want half the NSPs busy across the card", load)
+
+	samples, err := source.Sample(context.Background())
+	if err != nil {
+		t.Fatalf("Sample() error = %v", err)
+	}
+	if len(samples) != 1 {
+		t.Fatalf("got %d samples, want the card's memory sample", len(samples))
+	}
+	if samples[0].Load.Valid {
+		t.Fatalf("load = %+v, want none: reserved NSPs are not busy NSPs", samples[0].Load)
+	}
+	if want := uint64(4*(31391744-17858364)) * 1024; samples[0].MemoryUsedBytes != want {
+		t.Fatalf("memory used = %d, want %d", samples[0].MemoryUsedBytes, want)
 	}
 }

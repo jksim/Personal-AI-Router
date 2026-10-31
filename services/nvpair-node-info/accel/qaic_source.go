@@ -62,7 +62,6 @@ func (s *qaicSource) Detect(context.Context) ([]Device, error) {
 			StatsKey:  qaicStatsKey(card),
 			Vendor:    VendorQualcomm,
 			Kind:      KindAccelerator,
-			Load:      card.Load(),
 		})
 	}
 	return devices, nil
@@ -82,16 +81,16 @@ func (s *qaicSource) Sample(context.Context) ([]DeviceSample, error) {
 	}
 	samples := make([]DeviceSample, 0, len(cards))
 	for _, card := range cards {
-		load := card.Load()
-		if !load.Valid {
+		if !card.answered() {
 			// Nothing was readable for this card. Publishing a zero
 			// would be indistinguishable from a genuinely idle card.
 			continue
 		}
+		// No Load: the Qualcomm stack has no busy counter, and reserved NSPs
+		// are not busy NSPs.
 		used := (card.DramTotalKB - card.DramFreeKB) * 1024
 		samples = append(samples, DeviceSample{
 			StatsKey:        qaicStatsKey(card),
-			Load:            load,
 			MemoryUsedBytes: used,
 		})
 	}
