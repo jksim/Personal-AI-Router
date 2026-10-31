@@ -208,3 +208,20 @@ func TestLiveQAICSensors(t *testing.T) {
 		t.Logf("%s: temp=%+v power=%+v cap=%+v", soc.BDF, sensors.TemperatureC, sensors.PowerW, sensors.PowerCapW)
 	}
 }
+
+// TestLiveQAICInspect checks the readiness view against the real card: every
+// SoC answers, has its qaic hwmon, and sits behind a bridge port.
+func TestLiveQAICInspect(t *testing.T) {
+	requireLiveQAIC(t)
+	socs, err := InspectQAIC()
+	if err != nil {
+		t.Fatalf("InspectQAIC: %v", err)
+	}
+	for _, soc := range socs {
+		t.Logf("%s node=%s answered=%v hwmon=%v upstream=%s (%s) err=%v",
+			soc.PCIAddress, soc.Node, soc.Answered, soc.HasHwmon, soc.UpstreamPort, soc.UpstreamID, soc.QueryError)
+		if !soc.Answered || !soc.HasHwmon || soc.UpstreamPort == "" {
+			t.Errorf("%s: want answered, with a qaic hwmon and an upstream port", soc.PCIAddress)
+		}
+	}
+}
