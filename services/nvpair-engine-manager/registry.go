@@ -98,6 +98,8 @@ type Platform struct {
 // Install describes how to obtain the engine in user mode. Fetch may be
 // unpinned, but every member of Artifacts is checksum-verified before `run`
 // executes. All downloads are HTTPS-only outside loopback.
+// Run may stand alone when it downloads nothing PAIR can checksum, such as a
+// container image that docker pulls and verifies by digest.
 type Install struct {
 	Fetch     *Fetch            `json:"fetch,omitempty"`
 	Artifacts []InstallArtifact `json:"artifacts,omitempty"`
@@ -779,9 +781,6 @@ func (p *Platform) validate(key string) error {
 		}
 		if (p.Install.Fetch != nil || hasArtifacts) && len(p.Install.Run) == 0 {
 			return fmt.Errorf("platform %q: install.run is required when install.fetch or install.artifacts is present", key)
-		}
-		if len(p.Install.Run) > 0 && p.Install.Fetch == nil && !hasArtifacts {
-			return fmt.Errorf("platform %q: install.run requires a fetch or artifacts (the downloads the run command uses)", key)
 		}
 		if p.Install.Fetch != nil && strings.TrimSpace(p.Install.Fetch.URL) == "" {
 			return fmt.Errorf("platform %q: install.fetch.url is required when fetch is present", key)

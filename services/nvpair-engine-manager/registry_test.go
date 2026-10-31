@@ -191,6 +191,18 @@ func TestValidateRejectsDownloadInstallWithoutRun(t *testing.T) {
 	})
 }
 
+// TestValidateAcceptsRunOnlyInstall allows an install whose run step downloads
+// nothing PAIR can checksum, such as a container image pulled by digest.
+func TestValidateAcceptsRunOnlyInstall(t *testing.T) {
+	m := validManifest()
+	p := m.Platforms["linux/amd64"]
+	p.Install = &Install{Run: []string{"docker", "pull", "example/image@sha256:0000"}}
+	m.Platforms["linux/amd64"] = p
+	if err := m.Validate(); err != nil {
+		t.Fatalf("run-only install rejected: %v", err)
+	}
+}
+
 func TestValidateAcceptsScriptOnlyInstall(t *testing.T) {
 	m := validManifest()
 	p := m.Platforms["linux/amd64"]
@@ -282,11 +294,6 @@ func TestValidateRejects(t *testing.T) {
 			p.Runtime.Bin = ""
 			m.Platforms["linux/amd64"] = p
 		}, "runtime.bin is required"},
-		{"run without fetch", func(m *Manifest) {
-			p := m.Platforms["linux/amd64"]
-			p.Install.Fetch = nil
-			m.Platforms["linux/amd64"] = p
-		}, "requires a fetch"},
 		{"fetch with artifacts", func(m *Manifest) {
 			p := m.Platforms["linux/amd64"]
 			p.Install.Artifacts = validInstallArtifacts()
