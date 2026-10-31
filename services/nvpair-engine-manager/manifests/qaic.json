@@ -1,0 +1,118 @@
+{
+  "engine": "qaic",
+  "display_name": "Qualcomm AI 100",
+  "manifest_version": 1,
+  "actions": {
+    "list_models": {
+      "description": "List the models whose QPC is in the models directory (<owner>/<name>/<qpc-config>/qpc-*/qpc/programqpc.bin).",
+      "cmd": [
+        "sh",
+        "-c",
+        "cd \"{models_dir}\" 2>/dev/null || exit 0; for f in */*/*/qpc-*/qpc/programqpc.bin; do [ -f \"$f\" ] && printf '%s\\n' \"$f\" | cut -d/ -f1-2; done | sort -u"
+      ],
+      "result": {
+        "lines": true
+      }
+    },
+    "loaded_models": {
+      "description": "List the model the Qualcomm engine is serving. It serves one model per process.",
+      "http": {
+        "method": "GET",
+        "path": "/v1/models"
+      },
+      "result": {
+        "array": "data",
+        "field": "id"
+      }
+    },
+    "chat": {
+      "description": "OpenAI-compatible chat completion (params: {\"model\": \"<name>\", \"messages\": [...]}).",
+      "http": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body_schema": {
+          "model": "string",
+          "messages": "array"
+        }
+      }
+    }
+  },
+  "platforms": {
+    "linux/amd64": {
+      "detect": [
+        "{install_dir}/qaic-serve"
+      ],
+      "install": {
+        "run": [
+          "sh",
+          "-c",
+          "set -e; docker pull \"$2\"; mkdir -p \"$1/home\" \"$1/hf\"; printf '%s' \"$3\" | base64 -d > \"$1/qaic-serve\"; chmod 755 \"$1/qaic-serve\"",
+          "qaic-install",
+          "{install_dir}",
+          "ghcr.io/quic/cloud_ai_inference_vllm@sha256:55cbcb6a11a50a18613ac41523cfefcf75f7c1e64e5e0c43ff4a3334e33d97a9",
+          "IyEvYmluL3NoCiMgU1BEWC1GaWxlQ29weXJpZ2h0VGV4dDogQ29weXJpZ2h0IChjKSAyMDI2IEphcnJldHQgU2ltZXJzb24KIyBTUERYLUxpY2Vuc2UtSWRlbnRpZmllcjogQXBhY2hlLTIuMAojCiMgUnVucyBRdWFsY29tbSdzIHZMTE0gY29udGFpbmVyIGZvciBvbmUgUVBDLiBXcml0dGVuIGJ5IFBBSVIncyBpbnN0YWxsZXIuCiMgVXNhZ2U6IFFBSUNfSE9TVD08aG9zdD4gUUFJQ19QT1JUPTxwb3J0PiBxYWljLXNlcnZlIDxtb2RlbD4Kc2V0IC1ldQptb2RlbD0kMQpob3N0PSRRQUlDX0hPU1QKcG9ydD0kUUFJQ19QT1JUCmltYWdlPWdoY3IuaW8vcXVpYy9jbG91ZF9haV9pbmZlcmVuY2VfdmxsbUBzaGEyNTY6NTVjYmNiNmExMWE1MGExODYxM2FjNDE1MjNjZmVmY2Y3NWY3YzFlNjRlNWUwYzQzZmY0YTMzMzRlMzNkOTdhOQpxcGM9IiIKZm9yIGNhbmRpZGF0ZSBpbiAiJFFBSUNfTU9ERUxTX0RJUi8kbW9kZWwiLyovcXBjLSovcXBjOyBkbwoJaWYgWyAtZiAiJGNhbmRpZGF0ZS9wcm9ncmFtcXBjLmJpbiIgXTsgdGhlbgoJCXFwYz0kY2FuZGlkYXRlCgkJYnJlYWsKCWZpCmRvbmUKaWYgWyAteiAiJHFwYyIgXTsgdGhlbgoJZWNobyAicWFpYy1zZXJ2ZTogbm8gUVBDIGZvciAkbW9kZWwgdW5kZXIgJFFBSUNfTU9ERUxTX0RJUiIgPiYyCglleGl0IDIKZmkKYnVuZGxlPSQoZGlybmFtZSAiJHFwYyIpCmNvbmZpZz0kKGRpcm5hbWUgIiRidW5kbGUiKQppZiBbICEgLWYgIiRjb25maWcvbGF1bmNoLmFyZ3MiIF07IHRoZW4KCWVjaG8gInFhaWMtc2VydmU6ICRjb25maWcvbGF1bmNoLmFyZ3MgaXMgbWlzc2luZyIgPiYyCglleGl0IDIKZmkKbGF1bmNoPSQoY2F0ICIkY29uZmlnL2xhdW5jaC5hcmdzIikKZGV2aWNlcz0iIgpmb3Igbm9kZSBpbiAvZGV2L2FjY2VsL2FjY2VsKjsgZG8KCWRldmljZXM9IiRkZXZpY2VzIC0tZGV2aWNlICRub2RlIgpkb25lCmdyb3VwPSQoc3RhdCAtYyAlZyAvZGV2L2FjY2VsL2FjY2VsMCkKZG9ja2VyIHJtIC1mIG52cGFpci1xYWljID4vZGV2L251bGwgMj4mMSB8fCB0cnVlCiMgc2hlbGxjaGVjayBkaXNhYmxlPVNDMjA4Ngpkb2NrZXIgcnVuIC0tcm0gLS1pbml0IC0tbmFtZSBudnBhaXItcWFpYyAtLXVzZXIgIiQoaWQgLXUpOiQoaWQgLWcpIiAtLWdyb3VwLWFkZCAiJGdyb3VwIiBcCgktLXdvcmtkaXIgL2hvbWUvcnVuICRkZXZpY2VzIC0tbmV0d29yayBob3N0IC0tc2htLXNpemU9NGdiIFwKCS1lIEhPTUU9L2hvbWUvcnVuIC12ICIkUUFJQ19JTlNUQUxMX0RJUi9ob21lOi9ob21lL3J1biIgXAoJLWUgSEZfSE9NRT0vaGYgLXYgIiRRQUlDX0lOU1RBTExfRElSL2hmOi9oZiIgXAoJLXYgIiRidW5kbGU6L3FwYzpybyIgLWUgVkxMTV9RQUlDX1FQQ19QQVRIPS9xcGMvcXBjIFwKCSIkaW1hZ2UiIC0tbW9kZWwgIiRtb2RlbCIgLS1ob3N0ICIkaG9zdCIgLS1wb3J0ICIkcG9ydCIgJGxhdW5jaCAmCmNoaWxkPSQhCiMgdkxMTSBkb2VzIG5vdCBleGl0IG9uIFNJR1RFUk0uIFN0b3AgdGhlIGNvbnRhaW5lciwgd2hpY2gga2lsbHMgaXQgYWZ0ZXIgMzAgcy4KdHJhcCAnZG9ja2VyIHN0b3AgLXQgMzAgbnZwYWlyLXFhaWMgPi9kZXYvbnVsbCAyPiYxIHx8IHRydWU7IHdhaXQgIiRjaGlsZCIgfHwgdHJ1ZTsgZXhpdCAwJyBURVJNIElOVAp3YWl0ICIkY2hpbGQiCg=="
+        ],
+        "mode": "user"
+      },
+      "uninstall": {
+        "run": [
+          "sh",
+          "-c",
+          "docker rmi ghcr.io/quic/cloud_ai_inference_vllm@sha256:55cbcb6a11a50a18613ac41523cfefcf75f7c1e64e5e0c43ff4a3334e33d97a9 >/dev/null 2>&1 || true"
+        ],
+        "remove": [
+          "{install_dir}"
+        ]
+      },
+      "runtime": {
+        "mode": "process",
+        "bin": "{install_dir}/qaic-serve",
+        "args": [
+          "{model}"
+        ],
+        "env": {
+          "QAIC_HOST": "{host}",
+          "QAIC_PORT": "{port}",
+          "QAIC_MODELS_DIR": "{models_dir}",
+          "QAIC_INSTALL_DIR": "{install_dir}"
+        },
+        "bind": "127.0.0.1",
+        "port": 8101,
+        "ready": {
+          "http": "http://127.0.0.1:{port}/health",
+          "status": 200,
+          "timeout_s": 540
+        },
+        "stop": {
+          "signal": "term",
+          "grace_s": 60
+        },
+        "health": {
+          "http": "http://127.0.0.1:{port}/health",
+          "status": 200,
+          "interval_s": 10
+        },
+        "editable_launch": {
+          "fixed_args": [
+            "{model}"
+          ],
+          "controls": [
+            {
+              "env": [
+                "QAIC_PORT"
+              ],
+              "value": "{server.port}"
+            },
+            {
+              "env": [
+                "QAIC_HOST"
+              ],
+              "value": "{server.host}"
+            }
+          ]
+        }
+      },
+      "models_dir": "~/.local/share/nvpair/qaic-models"
+    }
+  }
+}

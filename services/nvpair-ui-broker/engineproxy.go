@@ -168,6 +168,8 @@ func buildEngineProxyProfiles() []engineProxyProfile {
 		// MAX is adopted: a listener on :8000 may be a user's own `max serve`,
 		// which the broker plans around rather than moving.
 		"max": {Ownership: adoptedEngine, HealthProbePath: "/health"},
+		// The Qualcomm engine runs PAIR's own launcher, so it is managed.
+		"qaic": {Ownership: managedEngine, HealthProbePath: "/health"},
 	}
 	out := make([]engineProxyProfile, 0, len(engines.All()))
 	for _, e := range engines.All() {

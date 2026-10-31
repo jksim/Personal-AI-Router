@@ -151,6 +151,12 @@ var maxBaseRoutes = []route{
 	{Path: "/v1/models", Role: roleModelListOpenAIGET},
 }
 
+// qaicBaseRoutes is the Qualcomm engine's own surface: Qualcomm's vLLM serves
+// the OpenAI API, so this is the model list.
+var qaicBaseRoutes = []route{
+	{Path: "/v1/models", Role: roleModelListOpenAIGET},
+}
+
 // openAIInferenceRoutes is the OpenAI-compatible inference surface.
 var openAIInferenceRoutes = []route{
 	{Path: "/v1/chat/completions", Role: roleInferencePOST},
@@ -170,6 +176,7 @@ func buildProfiles() []engineProfile {
 	lmstudio, _ := engines.ByName("lmstudio")
 	llamacpp, _ := engines.ByName("llamacpp")
 	max, _ := engines.ByName(engines.NameMax)
+	qaic, _ := engines.ByName(engines.NameQaic)
 	ollamaRoutes := slices.Concat(ollamaBaseRoutes, openAIInferenceRoutes, anthropicInferenceRoutes)
 	lmStudioRoutes := slices.Concat(lmStudioBaseRoutes, openAIInferenceRoutes, anthropicInferenceRoutes)
 	llamaCPPRoutes := slices.Concat(llamaCPPBaseRoutes, openAIInferenceRoutes)
@@ -177,6 +184,9 @@ func buildProfiles() []engineProfile {
 	// routing a path the engine answers with a 404 would make the proxy look
 	// like the failure.
 	maxRoutes := slices.Concat(maxBaseRoutes, openAIInferenceRoutes)
+	// No anthropicInferenceRoutes, for the same reason as MAX: vLLM serves no
+	// /v1/messages in this image.
+	qaicRoutes := slices.Concat(qaicBaseRoutes, openAIInferenceRoutes)
 
 	return []engineProfile{
 		{
@@ -210,6 +220,13 @@ func buildProfiles() []engineProfile {
 			Routes:                maxRoutes,
 			ModelNaming:           exactID,
 			ReservedPersistedPort: 8001,
+		},
+		{
+			Engine:                qaic,
+			StandalonePort:        8100,
+			Routes:                qaicRoutes,
+			ModelNaming:           exactID,
+			ReservedPersistedPort: 8101,
 		},
 	}
 }

@@ -89,6 +89,7 @@ const (
 	ServiceLMStudio ServiceKey = "lm"
 	ServiceLlamaCPP ServiceKey = "lc"
 	ServiceMax      ServiceKey = "mx"
+	ServiceQaic     ServiceKey = "qa"
 	ServiceErrors   ServiceKey = "er"
 	ServiceWorkload ServiceKey = "wl"
 	ServiceCluster  ServiceKey = "cl"
@@ -106,7 +107,7 @@ const (
 
 // serviceKeyOrder is the deterministic emit order for service ports in TXT.
 var serviceKeyOrder = []ServiceKey{
-	ServiceNodeInfo, ServiceOllama, ServiceLMStudio, ServiceLlamaCPP, ServiceMax,
+	ServiceNodeInfo, ServiceOllama, ServiceLMStudio, ServiceLlamaCPP, ServiceMax, ServiceQaic,
 	ServiceErrors, ServiceWorkload, ServiceCluster, ServiceEngineManager,
 	ServiceEngineControl,
 }

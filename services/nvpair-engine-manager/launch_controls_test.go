@@ -134,7 +134,7 @@ func TestBundledLlamaCPPDisablesCORSByDefault(t *testing.T) {
 func TestBundledNetworkingControls(t *testing.T) {
 	reg := loadWithOverrides(t, t.TempDir())
 	// Adding a bundled engine requires an explicit networking review and cases.
-	wantEngines := []string{"llamacpp", "lmstudio", "max", "ollama"}
+	wantEngines := []string{"llamacpp", "lmstudio", "max", "ollama", "qaic"}
 	names := reg.Names()
 	slices.Sort(names)
 	if !slices.Equal(names, wantEngines) {
@@ -179,6 +179,16 @@ func TestBundledNetworkingControls(t *testing.T) {
 					}
 					valid = []string{"--port 23456", "--port=23456", "MAX_SERVE_PORT=23456", `"--port" "23456"`}
 					invalid = []string{"--port 0", "--port 65536", "--port", "--port no", "MAX_SERVE_HOST=0.0.0.0", "MAX_SERVE_HOST=::", "MAX_SERVE_PORT=0", "--port 23456 --port 23457"}
+				case "qaic":
+					// PAIR's launcher passes the port and bind address to vLLM
+					// from the environment. It exposes none of vLLM's CORS
+					// options, so there is no browser-access policy to make
+					// editable; that is the reviewed answer, not an omission.
+					if !reflect.DeepEqual(policy.Controls, []LaunchControl{{Value: "{server.port}", Env: []string{"QAIC_PORT"}}, {Value: "{server.host}", Env: []string{"QAIC_HOST"}}}) {
+						t.Fatal("incomplete Qualcomm controls")
+					}
+					valid = []string{"QAIC_PORT=23456", `QAIC_PORT="23456"`, "QAIC_PORT=23456 QAIC_HOST=127.0.0.1"}
+					invalid = []string{"QAIC_PORT=0", "QAIC_PORT=65536", "QAIC_PORT=no", "QAIC_HOST=0.0.0.0", "QAIC_HOST=::", "QAIC_PORT=23456 QAIC_PORT=23457"}
 				default:
 					if !reflect.DeepEqual(policy.Controls, []LaunchControl{{Value: "{server.host}:{server.port}", Env: []string{"OLLAMA_HOST"}}, {Value: "{cors.origins}", Env: []string{"OLLAMA_ORIGINS"}}}) {
 						t.Fatal("incomplete Ollama controls")

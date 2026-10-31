@@ -132,6 +132,7 @@ const (
 	NameLMStudio = "lmstudio"
 	NameLlamaCPP = "llamacpp"
 	NameMax      = "max"
+	NameQaic     = "qaic"
 )
 
 // all is the ordered engine set. Ollama is first; see the package comment.
@@ -167,6 +168,14 @@ var all = []Engine{
 		FacadePort:       8000,
 		EnginePortBase:   8001,
 		PortFile:         "max-proxy-port.json",
+	},
+	{
+		Name:             NameQaic,
+		DisplayName:      "Qualcomm AI 100",
+		DiscoveryService: noderec.ServiceQaic,
+		FacadePort:       8100,
+		EnginePortBase:   8101,
+		PortFile:         "qaic-proxy-port.json",
 	},
 }
 

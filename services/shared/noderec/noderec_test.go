@@ -148,6 +148,7 @@ func TestTransportPolicy(t *testing.T) {
 		{ServiceOllama, TransportPlain, false, false},
 		{ServiceLMStudio, TransportPlain, false, false},
 		{ServiceLlamaCPP, TransportPlain, false, false},
+		{ServiceQaic, TransportPlain, false, false},
 		{ServiceEngineManager, TransportPlain, false, false},
 		{ServiceErrors, TransportMTLSWhenClustered, true, false},
 		{ServiceWorkload, TransportMTLSWhenClustered, true, false},

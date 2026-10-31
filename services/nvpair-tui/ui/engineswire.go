@@ -143,6 +143,14 @@ var modelWires = map[string]modelWire{
 		"delete": modelOnly("delete_model"),
 		"pull":   modelOnly("pull_model"),
 	},
+	// The Qualcomm engine also serves one model per process, so its model
+	// operations take the same shape as MAX's.
+	engines.NameQaic: {
+		"load":   modelOnly("load_model"),
+		"unload": modelOnly("unload_model"),
+		"delete": modelOnly("delete_model"),
+		"pull":   modelOnly("pull_model"),
+	},
 }
 
 // downloadExamples show what a download name looks like for each engine. The
@@ -153,6 +161,7 @@ var downloadExamples = map[string]string{
 	engines.NameLMStudio: "lmstudio-community/Qwen3-8B-GGUF",
 	engines.NameLlamaCPP: "ggml-org/gemma-3-1b-it-GGUF:Q4_K_M",
 	engines.NameMax:      "HuggingFaceTB/SmolLM2-135M-Instruct",
+	engines.NameQaic:     "Qwen/Qwen3-30B-A3B",
 }
 
 // downloadPrompt is the placeholder for the download-by-name field, with an
