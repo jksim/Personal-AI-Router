@@ -235,6 +235,10 @@ type catalogService struct {
 	lmStudio *listingCache
 	llamaCPP *listingCache
 
+	// qaicHost reports this host's Qualcomm readiness, which decides the QPCs
+	// the Qualcomm engine can run here.
+	qaicHost func() qaicHostReady
+
 	// searchMu guards the llama.cpp searches, kept by lowercased query with
 	// searchOrder from least to most recently used.
 	searchMu      sync.Mutex
@@ -283,6 +287,10 @@ func newCatalogService() *catalogService {
 	c := &catalogService{
 		client:        newEngineHTTPClient(catalogHTTPTimeout),
 		llamaSearches: map[string]*listingCache{},
+		qaicHost: func() qaicHostReady {
+			ready, _ := currentQAICHost(nil)
+			return ready
+		},
 	}
 	c.lmStudio = &listingCache{label: "lm studio catalog", fetch: c.fetchLmStudio}
 	c.llamaCPP = &listingCache{label: "llama.cpp catalog", fetch: c.fetchLlamaCPP}
@@ -353,6 +361,18 @@ func (c *catalogService) Catalog(ctx context.Context, engine, platform, arch, qu
 		// Every entry is a HuggingFace repo id, which installs anywhere MAX
 		// runs, so nothing is filtered for the target.
 		return CatalogResult{Models: models, Source: maxCatalogSource, Platform: platform, Arch: arch}, nil
+	case "qaic":
+		entries, err := qaicCatalogEntries()
+		if err != nil {
+			return CatalogResult{}, err
+		}
+		result := CatalogResult{Models: []CatalogModel{}, Source: qaicCatalogSource, Platform: platform, Arch: arch}
+		// The qaic driver is Linux only, and a QPC fits one host's card.
+		if platform == "linux" && arch == "amd64" {
+			host := c.qaicHost()
+			result.Models = qaicCatalogModels(usableQPCs(entries, host.SoCCount, host.P2PAllowed))
+		}
+		return result, nil
 	default:
 		return CatalogResult{}, fmt.Errorf("no model catalog for engine %q", engine)
 	}

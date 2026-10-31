@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -30,5 +31,22 @@ func TestLiveQAICHostReady(t *testing.T) {
 	}
 	if !ready.ok() {
 		t.Fatal("host not ready")
+	}
+}
+
+// TestLiveQAICCatalog checks that this host's catalogue offers the 4-SoC QPC.
+func TestLiveQAICCatalog(t *testing.T) {
+	if os.Getenv("NVPAIR_LIVE_QAIC") != "1" {
+		t.Skip("set NVPAIR_LIVE_QAIC=1 to check the real card")
+	}
+	result, err := newCatalogService().Catalog(context.Background(), "qaic", "linux", "amd64", "")
+	if err != nil {
+		t.Fatalf("Catalog: %v", err)
+	}
+	for _, m := range result.Models {
+		t.Logf("%s %v %d bytes", m.ID, m.Tags, m.Size)
+	}
+	if len(result.Models) == 0 || result.Models[0].ID != "Qwen/Qwen3-30B-A3B" {
+		t.Fatal("the 4-SoC Qwen3 QPC is not offered on this host")
 	}
 }

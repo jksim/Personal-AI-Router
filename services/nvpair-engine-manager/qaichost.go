@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
 
 	"nvpair-shared/accel"
@@ -38,6 +39,15 @@ type qaicHostProblem struct {
 }
 
 const qaicHostSetupDoc = "See docs/qaic-host-setup.mdx."
+
+// currentQAICHost runs the readiness check on this host. The caller passes the
+// result of its own Docker check, or nil where Docker does not matter.
+func currentQAICHost(dockerErr error) (qaicHostReady, []qaicHostProblem) {
+	// Without /proc/cmdline no ACS parameter can be seen, so P2P is not allowed.
+	cmdline, _ := os.ReadFile("/proc/cmdline")
+	socs, inspectErr := accel.InspectQAIC()
+	return checkQAICHost(socs, inspectErr, string(cmdline), dockerErr)
+}
 
 // checkQAICHost evaluates host readiness from the SoCs that accel.InspectQAIC
 // found, the kernel command line, and the result of a Docker check.

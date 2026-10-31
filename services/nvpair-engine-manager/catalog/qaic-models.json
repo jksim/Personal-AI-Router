@@ -1,0 +1,15 @@
+[
+  {
+    "model": "Qwen/Qwen3-30B-A3B",
+    "qpc": "qpc_16cores_128pl_8192cl_4devices_mxfp6_mxint8",
+    "url": "https://dc00tk1pxen80.cloudfront.net/SDK1.21.6/Qwen/Qwen3-30B-A3B/Qwen3-30B-A3B_qpc_16cores_128pl_8192cl_4devices_mxfp6_mxint8.tar.gz",
+    "sha256": "e9dc6d9798f3e4447ac9bf4be7389757349b285eda49e524f4878a967df26984",
+    "size": 46394016830,
+    "unpacked_size": 51695250031,
+    "sdk": "1.21.6",
+    "devices": 4,
+    "batch": 1,
+    "context": 8192,
+    "prefill": 128
+  }
+]
