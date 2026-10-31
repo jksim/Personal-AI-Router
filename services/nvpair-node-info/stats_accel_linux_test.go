@@ -10,7 +10,7 @@ import (
 	"errors"
 	"testing"
 
-	"nvpair-node-info/accel"
+	"nvpair-shared/accel"
 )
 
 type fakeSampler struct {

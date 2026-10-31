@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"nvpair-node-info/accel"
+	"nvpair-shared/accel"
 )
 
 // Linux node-stats collection. This collector is the Linux counterpart to

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"nvpair-node-info/accel"
+	"nvpair-shared/accel"
 )
 
 // TestNvidiaSmiCSVBuildsQueryArgs pins the exact argv the CSV helper hands the

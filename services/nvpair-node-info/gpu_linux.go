@@ -16,7 +16,7 @@ import (
 
 	"github.com/jaypipes/ghw"
 
-	"nvpair-node-info/accel"
+	"nvpair-shared/accel"
 )
 
 // nvidiaSmiTimeout caps how long we wait for a single nvidia-smi invocation.

@@ -26,7 +26,7 @@ import (
 	"nvpair-shared/noderec"
 	"nvpair-shared/splitlisten"
 
-	"nvpair-node-info/accel"
+	"nvpair-shared/accel"
 )
 
 type GPUInfo struct {
