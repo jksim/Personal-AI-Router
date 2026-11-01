@@ -20,7 +20,7 @@ SPDX-License-Identifier: Apache-2.0
 > **Do not report issues with this fork to NVIDIA.** Use this repository's issue
 > tracker, and see [SECURITY.md](SECURITY.md) for vulnerability reporting.
 >
-> **What this fork adds.** The current release, v0.7.1, is PAIR 1.0.0 with two
+> **What this fork adds.** The current release, v0.8.0, is PAIR 1.0.0 with three
 > additions:
 >
 > - **[Modular MAX](https://www.modular.com/) as a managed engine,** beside
@@ -31,14 +31,13 @@ SPDX-License-Identifier: Apache-2.0
 >   memory, temperature and power, to every node in the cluster, beside the
 >   node's GPUs. The Qualcomm stack has no busy counter, so the card reports no
 >   utilization. Linux only, because Qualcomm's `qaic` driver is Linux-only.
+> - **The Qualcomm engine.** PAIR installs Qualcomm's vLLM container, downloads
+>   models compiled for the card (QPCs) with a pinned SHA-256, runs one model at a
+>   time on the card, and routes requests to it across the cluster. Linux x86-64
+>   only. The host needs preparing first; see
+>   [Preparing a host for the Qualcomm AI 100 engine](docs/qaic-host-setup.mdx).
 >
-> This branch also adds the **Qualcomm engine**: PAIR installs Qualcomm's vLLM
-> container, downloads models compiled for the card (QPCs) with a pinned SHA-256,
-> runs one model at a time on the card, and routes requests to it across the
-> cluster. Linux x86-64 only. The host needs preparing first; see
-> [Preparing a host for the Qualcomm AI 100 engine](docs/qaic-host-setup.mdx).
->
-> The fork's version numbers are its own: 0.7.1 contains upstream 1.0.0. The
+> The fork's version numbers are its own: 0.8.0 contains upstream 1.0.0. The
 > release was tested on a Windows 11 node and an Ubuntu 24.04 node with an
 > RTX A4500 and an AI 100 Ultra, in one cluster.
 >
@@ -128,7 +127,7 @@ The fork uses the same app ID and data folder as official PAIR. Installing it
 **On Linux,** install the package from the directory you downloaded it into:
 
 ```bash
-sudo apt install ./NVPAIR-Setup-0.7.1-amd64.deb
+sudo apt install ./NVPAIR-Setup-0.8.0-amd64.deb
 ```
 
 This also upgrades an installed official PAIR package.
@@ -322,14 +321,19 @@ on. Upstream's changes are in
 [NVIDIA's releases](https://github.com/NVIDIA/Personal-AI-Router/releases) and
 the [Release notes](docs/release-notes.mdx).
 
-Known issues in v0.7.1:
+Known issues in v0.8.0:
 
 - The terminal interface says "PAIR 1.0.0 is available". This build already
   contains 1.0.0, so ignore the notice.
 - **Settings → Service** shows "Error checking for updates", because the fork's
   builds have no update feed.
 - If another program uses port 8000, PAIR moves MAX's proxy to the next free
-  port. Copy MAX's URL from **Endpoints → API endpoints**.
+  port. Port 8100 works the same for the Qualcomm engine. Copy the URL from
+  **Endpoints → API endpoints**.
+- Qwen3 replies start with an empty `<think></think>`, even with `/no_think`.
+  PAIR passes the engine's reply unchanged.
+- The Qualcomm engine's catalog has one model, Qwen3-30B-A3B, which needs a
+  4-SoC card and the ACS kernel parameter.
 
 ## Roadmap
 
