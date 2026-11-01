@@ -254,7 +254,7 @@ reachability verdict of its own — a failed `/v1/node-info` poll keeps the last
 good metrics and never marks a node offline.
 
 The model catalogue is backend-owned. `nvpair-engine-manager` serves the curated
-Ollama, LM Studio, llama.cpp, and MAX lists over `engine:catalog`, filtered for the
+Ollama, LM Studio, llama.cpp, MAX, and Qualcomm engine lists over `engine:catalog`, filtered for the
 operating system and CPU a model will install on; Electron relays the call and
 maps rows for the renderer, which then sends pull-ready model IDs back through
 the engine manager. llama.cpp's source is also searchable: the relay passes the

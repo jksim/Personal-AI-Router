@@ -100,7 +100,7 @@ They do not imply a WebSocket connection. Browser clients are not supported.
   became unreachable, so its cached snapshot is stale.
 
 `EngineType` currently includes `ollama`, `lm-studio`, `llama-cpp`, and `max`.
-`searchHub(engineType, query?)` serves the locked Ollama and MAX catalogs and cached
+`searchHub(engineType, query?)` serves the locked Ollama, MAX and Qualcomm catalogs and cached
 live Hugging Face catalogs for LM Studio and llama.cpp. A non-empty llama.cpp
 query performs an explicit bounded search across public Hugging Face GGUF
 repositories; other calls return the populated engine catalog. llama.cpp pull
@@ -204,7 +204,7 @@ Commands return no state. Renderer stores update from
 - update check, download, install, and status;
 - the node-local Inference Demo (`inferenceDemo.getState()` / `start()` / `stop()`
   and the `demo:state` push). `start()` rejects if a demo is already running on
-  this node or if no Ollama, LM Studio, llama.cpp, or MAX proxy exposed a
+  this node or if no Ollama, LM Studio, llama.cpp, MAX, or Qualcomm engine proxy exposed a
   text-generation model; callers show that as an ordinary error banner. Demo
   state is not synchronized across nodes.
 

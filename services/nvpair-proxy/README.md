@@ -109,9 +109,10 @@ The route table is a **classifier, not an allowlist**. An unlisted path is
 forwarded verbatim, which is how `/api/show`, `/api/pull`, `/api/ps`,
 `/api/version` and `OPTIONS` preflights keep working.
 
-The broker enables all four facades by default. Local llama.cpp-compatible
+The broker enables all five facades by default. Local llama.cpp-compatible
 clients use `8080`, while the managed `llama-server` stays on `8081`; MAX's
-facade is `8000`, with the managed `max serve` on `8001`.
+facade is `8000`, with the managed `max serve` on `8001`; the Qualcomm engine's
+facade is `8100`, with the managed container on `8101`.
 `--proxy-engines` can restrict a standalone broker or TUI to a subset.
 
 ### HTTP Reverse Proxy

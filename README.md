@@ -28,9 +28,15 @@ SPDX-License-Identifier: Apache-2.0
 >   selects its models, and routes inference to it across the cluster with the
 >   same model-aware routing, failover and mTLS. Linux x86-64 only.
 > - **Qualcomm Cloud AI 100 detection.** PAIR reports an AI 100 card, with its
->   memory, load, temperature and power, to every node in the cluster, beside the
->   node's GPUs. Linux only, because Qualcomm's `qaic` driver is Linux-only. PAIR
->   does not run models on the AI 100 yet; a Qualcomm engine is in development.
+>   memory, temperature and power, to every node in the cluster, beside the
+>   node's GPUs. The Qualcomm stack has no busy counter, so the card reports no
+>   utilization. Linux only, because Qualcomm's `qaic` driver is Linux-only.
+>
+> This branch also adds the **Qualcomm engine**: PAIR installs Qualcomm's vLLM
+> container, downloads models compiled for the card (QPCs) with a pinned SHA-256,
+> runs one model at a time on the card, and routes requests to it across the
+> cluster. Linux x86-64 only. The host needs preparing first; see
+> [Preparing a host for the Qualcomm AI 100 engine](docs/qaic-host-setup.mdx).
 >
 > The fork's version numbers are its own: 0.7.1 contains upstream 1.0.0. The
 > release was tested on a Windows 11 node and an Ubuntu 24.04 node with an
@@ -69,7 +75,7 @@ one, and both report live GPU and memory use throughout.
 | **Architectures** | x64 and arm64 on all three. Windows on ARM is experimental. This fork's releases are x64 only. |
 | **Installers** | This fork's releases: Windows x64 `.exe` and Linux x64 `.deb`. For macOS, arm64 and other Linux distributions, [build from source](docs/building.mdx). |
 | **Mixing nodes** | Windows, Linux, and macOS nodes can all be paired with each other |
-| **Inference engines** | Ollama, LM Studio, llama.cpp, and Modular MAX — all installed and managed by PAIR. MAX is Linux x86-64 only (it needs AVX2 and glibc 2.34+), and PAIR installs it into its own self-contained environment rather than changing your system Python. |
+| **Inference engines** | Ollama, LM Studio, llama.cpp, Modular MAX, and the Qualcomm engine — all installed and managed by PAIR. MAX is Linux x86-64 only (it needs AVX2 and glibc 2.34+), and PAIR installs it into its own self-contained environment rather than changing your system Python. The Qualcomm engine is Linux x86-64 only and needs a Cloud AI 100 card, Docker, and a prepared host. |
 | **Accelerators** | GPUs, as upstream PAIR reports them, and on Linux the Qualcomm Cloud AI 100. PAIR reports an AI 100 only after it answers a status request, so a card that failed to start is not shown. To read the card, your user needs access to `/dev/accel/*`; see the [node-info reference](services/nvpair-node-info/README.md). |
 
 **PAIR running on a machine does not mean an engine will.** PAIR itself runs on
@@ -140,7 +146,7 @@ This also upgrades an installed official PAIR package.
   status there.
 
 - **Get an engine running.** On the node's card, open **Engine settings** and
-  select **Install** next to Ollama, LM Studio, llama.cpp, or MAX (Linux x86-64). PAIR downloads and
+  select **Install** next to Ollama, LM Studio, llama.cpp, MAX, or the Qualcomm engine (both Linux x86-64). PAIR downloads and
   sets the engine up for you, so nothing needs to be in place beforehand. The
   first-start wizard preselects Ollama, LM Studio and llama.cpp, but not MAX.
 
@@ -192,7 +198,7 @@ The reply is ordinary OpenAI-shaped JSON, abbreviated here:
 }
 ```
 
-If you changed a port, or you are using LM Studio, llama.cpp or MAX rather than
+If you changed a port, or you are using LM Studio, llama.cpp, MAX or the Qualcomm engine rather than
 Ollama, copy the URL from **Endpoints → API endpoints** instead of assuming the
 one above.
 
@@ -239,8 +245,8 @@ Your data means settings, logs, cluster identity and certificates, and any engin
 PAIR installed for you. An engine the uninstaller cannot remove — one still
 holding a file open, say — is left in place rather than stopping the uninstall;
 remove it with its own uninstaller. **Model weights are not touched** — they live in the
-engine's own storage (`~/.ollama`, `~/.llamacpp`, `~/.lmstudio/models`, and
-MAX's `~/.cache/huggingface`), so
+engine's own storage (`~/.ollama`, `~/.llamacpp`, `~/.lmstudio/models`, MAX's `~/.cache/huggingface`, and the Qualcomm engine's
+`~/.local/share/nvpair/qaic-models`), so
 removing PAIR does not delete the models you downloaded. Delete those through the
 engine, or by removing its directory. An engine you installed yourself is also
 left alone.
@@ -277,6 +283,8 @@ Each entry assumes the ones before it.
    any steps the update needs.
 3. **[Managing engines](docs/engine-lifecycle.mdx)** — install, start, stop,
    update, and uninstall engines; what PAIR restores after you quit or relaunch.
+   To run models on a Qualcomm Cloud AI 100, read
+   **[Preparing a host for the Qualcomm AI 100 engine](docs/qaic-host-setup.mdx)** first.
 4. **[Engine settings](docs/engine-settings.mdx)** — change an engine's ports and
    its launch command, on this machine or a paired one, and give a browser access
    to your models.

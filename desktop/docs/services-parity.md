@@ -34,7 +34,7 @@ history.
 | Cluster pairing            | Complete                        | PIN pairing, identity, membership, leave, and removal                                                                                           |
 | Cluster transport security | Backend-owned                   | Node-to-node transport security, including the proxies' cluster-mTLS inference ingress, is entirely backend; Personal AI Router implements none |
 | Settings                   | Partial                         | Cluster identity plus per-engine ports and engine arguments, local and remote; inert backend settings are not surfaced                            |
-| Model catalog search       | Backend-owned                   | `engine:catalog` serves the locked Ollama and MAX lists and the cached LM Studio and llama.cpp catalogs, and searches Hugging Face for llama.cpp |
+| Model catalog search       | Backend-owned                   | `engine:catalog` serves the locked Ollama, MAX and Qualcomm lists and the cached LM Studio and llama.cpp catalogs, and searches Hugging Face for llama.cpp |
 
 ## Supervision
 

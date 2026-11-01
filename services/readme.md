@@ -75,7 +75,7 @@ configuration.
 
 The broker feeds every accepted local or peer workload transition plus compact
 GPU telemetry to the scheduler. Queued and running work is counted by destination
-node across Ollama, LM Studio, llama.cpp, and MAX together. Fresh maximum-GPU
+node across Ollama, LM Studio, llama.cpp, MAX, and the Qualcomm engine together. Fresh maximum-GPU
 utilization is smoothed into pressure 0–3; missing or stale telemetry is
 neutral. Rankings use `pending + gpuPressure`, and each facade adds local
 reservations before choosing, so bursts spread without waiting for workload

@@ -33,9 +33,11 @@ inference; two or more on the same local network let you try pairing and routing
 
 Nothing else has to be in place first:
 
-- **Engines.** PAIR installs and starts Ollama, LM Studio, llama.cpp, or MAX for
-  you in step 4. MAX is Linux x86-64 only; the others run on all three
-  platforms. Existing Ollama and LM Studio installations can also be detected
+- **Engines.** PAIR installs and starts Ollama, LM Studio, llama.cpp, MAX, or the
+  Qualcomm engine for you in step 4. MAX and the Qualcomm engine are Linux
+  x86-64 only; the others run on all three platforms. The Qualcomm engine
+  needs a Cloud AI 100 card and a prepared host; see
+  [Preparing a host for the Qualcomm AI 100 engine](qaic-host-setup.mdx). Existing Ollama and LM Studio installations can also be detected
   and used.
 - **Models.** PAIR downloads models for you in step 4. A request needs only one
   eligible node, so a single node holding the model is enough. Prepare the same
@@ -210,6 +212,7 @@ engine would normally listen on:
 - `1234` for LM Studio.
 - `8080` for llama.cpp.
 - `8000` for MAX.
+- `8100` for the Qualcomm engine.
 
 Tools already pointed at those ports keep working without reconfiguration, and
 the engine moves to the next free port.
@@ -265,7 +268,7 @@ curl <PAIR_BASE_URL>/v1/chat/completions \
 
 ### Ollama-Style Request (Ollama Endpoint Only)
 
-Sending this to the LM Studio, llama.cpp, or MAX endpoint fails, because those engines
+Sending this to the LM Studio, llama.cpp, MAX, or Qualcomm engine endpoint fails, because those engines
 do not implement Ollama's API. The `-N` flag tells `curl` not to buffer, so it
 displays the response stream as it is generated.
 
@@ -313,6 +316,7 @@ free port.
 | LM Studio / OpenAI-compatible proxy | `1234` |
 | llama.cpp / OpenAI-compatible proxy | `8080` |
 | MAX / OpenAI-compatible proxy | `8000` |
+| Qualcomm engine / OpenAI-compatible proxy | `8100` |
 
 When PAIR takes one of those ports, the engine behind it moves:
 
@@ -415,7 +419,7 @@ port. Otherwise, the CLI connects to `11434`, which is PAIR's proxy, and
 `ollama list` returns the cluster's view instead of the local machine's. Use the
 **Server** value under **Engine settings > Ports** to address the local engine
 directly. It defaults to `11435` for Ollama, `1235` for LM Studio, `8081`
-for llama.cpp, and `8001` for MAX.
+for llama.cpp, `8001` for MAX, and `8101` for the Qualcomm engine.
 
 Use the proxy port to check what your cluster can serve. Use the engine port to
 check what is installed on the local machine.
@@ -468,6 +472,7 @@ What that base URL serves depends on the engine behind it:
 | LM Studio | `http://127.0.0.1:1234` | The OpenAI-compatible paths (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`) and the Anthropic Messages API `/v1/messages` |
 | llama.cpp | `http://127.0.0.1:8080` | The OpenAI-compatible paths (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`, plus `/models`). Not Ollama's `/api/...` and not the Anthropic Messages API |
 | MAX | `http://127.0.0.1:8000` | The OpenAI-compatible paths (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`). Not Ollama's `/api/...` and not the Anthropic Messages API |
+| Qualcomm engine | `http://127.0.0.1:8100` | The OpenAI-compatible paths (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`). Not Ollama's `/api/...` and not the Anthropic Messages API |
 
 The distinction matters when you fill in an application's settings. A client
 written against the OpenAI API usually wants the `/v1` included, as in

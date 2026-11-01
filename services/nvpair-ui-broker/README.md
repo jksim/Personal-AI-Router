@@ -97,7 +97,7 @@ On startup — **before** emitting `app:ready` — the broker spawns the scanner
 **`nvpair-node-info`** is spawned next. It's a server, not an event source: it stands up the local `/v1/node-info` HTTP endpoint (GPU/CPU/memory inventory). It does not advertise itself — the broker registers its `ni` port with the scanner daemon, which carries it in the node record, and a peer's daemon fetches `/v1/node-info` over plain HTTP to enrich the node. The broker doesn't read anything back from node-info's stdout (drained and discarded). Spawning it is **optional**: if the binary can't be resolved (and no `--node-info-path` override was given) the broker logs a warning and continues serving discovery without it.
 
 **Engine advertising.** The broker runs an internal 5 s poll loop against local
-Ollama (`GET /`), LM Studio (`GET /v1/models`), llama.cpp (`GET /health`), and MAX (`GET /health`)
+Ollama (`GET /`), LM Studio (`GET /v1/models`), llama.cpp (`GET /health`), MAX (`GET /health`), and the Qualcomm engine (`GET /health`)
 at their configured backend ports and reconciles this node's engine registration
 with the scanner daemon:
 
@@ -160,7 +160,7 @@ Two classes of proxy notification are **not** re-emitted under any
 telemetry, and discovery snapshot. It smooths fresh utilization into pressure
 0–3, uses neutral pressure 1 for invalid/missing/older-than-10-second samples,
 and orders by `pending + gpuPressure`, then pressure, then stable UUID. Load is
-node-wide across Ollama, LM Studio, llama.cpp, and MAX because they normally contend
+node-wide across Ollama, LM Studio, llama.cpp, MAX, and the Qualcomm engine because they normally contend
 for the same resources. Each engine-specific `schedule:priority` carries
 `{engine,nodes,ranks}` and refreshes when order, pending counts, or pressure
 changes. The broker caches, generation-orders, and replays the full
@@ -450,6 +450,10 @@ The same broker-local status, subscription, and port-setting methods apply to `l
 
 The MAX facade of the same `nvpair-proxy` process, on compatibility port `:8000` with the managed MAX engine on `:8001`. The broker answers `get-status`, the subscription methods and `set-port` for every engine from one handler parameterised by the engine, so this surface is the LM Studio one with the prefix changed. MAX is *adopted* rather than moved: a listener already on `:8000` may be a user's own `max serve`, so the broker plans around it instead of relocating it.
 
+#### `qaic-proxy:get-status` / `qaic-proxy:subscribe` / `qaic-proxy:unsubscribe` / `qaic-proxy:<method>` (generic relay)
+
+The Qualcomm engine facade of the same `nvpair-proxy` process, on compatibility port `:8100` with the managed container on `:8101`. It is the MAX surface with the prefix changed. The engine is *managed*: PAIR's own launcher runs it, so nothing else is expected on its ports.
+
 #### `ollama-proxy:subscribe`
 
 Opts the peer into the `ollama-proxy:<event>` stream (off by default). On a fresh subscription the broker immediately replays the proxy's last `ready` payload as a baseline `ollama-proxy:ready` (if the proxy has come up), so a subscriber learns the port without a separate `ollama-proxy:get-status`.
@@ -621,8 +625,8 @@ Attach to a pre-existing endpoint:
 ## What this version intentionally does NOT do (yet)
 
 - **Engine-advertise control surface.** Engine registration is auto-driven only:
-  the broker tracks local Ollama, LM Studio, llama.cpp, and MAX and registers `ol`,
-  `lm`, `lc`, or `mx` with the daemon while each is up. There's no manual-advertise
+  the broker tracks local Ollama, LM Studio, llama.cpp, MAX, and the Qualcomm engine and
+  registers `ol`, `lm`, `lc`, `mx`, or `qa` with the daemon while each is up. There's no manual-advertise
   RPC (custom service, port, name, or TXT), and no way to advertise anything
   other than the detected engines.
 - **node-info control surface.** node-info is spawned and torn down with the broker, and the broker pushes it only two things over stdin: the log level, and this node's cluster principal (`nodeinfo:set-cluster-identity`, sent on spawn and on every membership or pin-set change, because node-info holds no cluster dir and so cannot read membership itself). Otherwise it's hands-off: the broker registers its port with the daemon (which enriches over plain HTTP) but doesn't pass through TLS material (`--cert` / `--key` / `--client-ca`) or a custom `--port`, and exposes no RPC to query or reconfigure it. It runs with its own defaults plus those two pushes.

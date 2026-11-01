@@ -1,0 +1,133 @@
+{/*
+SPDX-FileCopyrightText: Copyright (c) 2026 Jarrett Simerson
+SPDX-License-Identifier: Apache-2.0
+*/}
+
+# Preparing a Host for the Qualcomm AI 100 Engine
+
+The Qualcomm engine runs Qualcomm's vLLM container on a Qualcomm Cloud AI 100
+card. PAIR installs the container image, downloads models compiled for the card
+(QPCs), and starts, stops and routes to the engine. PAIR does **not** prepare the
+host. Each step below is a change you make yourself, once, as an administrator.
+
+PAIR checks the host before it installs or starts the engine. If a check fails,
+the error names the failed check and gives its fix from this page.
+
+## What the host needs
+
+- Linux on x86-64.
+- A Cloud AI 100 card, such as an Ultra (4 SoCs) or the AI 100 in a Dell Pro Max
+  16 Plus (2 SoCs).
+- The in-tree `qaic` kernel driver, and the AI 100 firmware files in
+  `/lib/firmware/qcom/aic100/`. On Ubuntu 24.04 the `linux-firmware` package
+  supplies them. The Qualcomm Platform SDK is not needed.
+- Docker, usable without `sudo`.
+- Disk space for the models. The Qwen3-30B-A3B QPC is a 46 GB download and
+  52 GB on disk. The container image is 18 GB on disk.
+
+## 1. Check that the card is on and answers
+
+Each SoC of the card is one PCI device and one `/dev/accel/accelN` node:
+
+```bash
+lspci -d 17cb: | grep -c a100     # 4 on an Ultra
+ls /dev/accel/                    # accel0 accel1 accel2 accel3
+```
+
+A card that is powered off, or still starting, does not answer, and PAIR reports
+"The card did not answer". Power the card on and wait until all SoCs appear.
+
+## 2. Give your user access to the device nodes
+
+The device nodes are `root:root` mode `0600` by default. Install a udev rule
+that gives a group access, and add your user to that group:
+
+```text
+# /etc/udev/rules.d/70-qaic.rules
+KERNEL=="accel*", SUBSYSTEM=="accel", GROUP="render", MODE="0660"
+```
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG render "$USER"   # then log out and in again
+```
+
+## 3. Load the card's temperature sensor
+
+PAIR reads each SoC's temperature from a hwmon device named `qaic`. The in-tree
+driver does not create one; the Qualcomm kernel module that does is a separate
+install. Check that every SoC has one:
+
+```bash
+grep -l qaic /sys/class/hwmon/*/name | wc -l   # one per SoC
+```
+
+## 4. Make Docker usable without sudo
+
+```bash
+sudo usermod -aG docker "$USER"   # then log out and in again
+docker version --format '{{.Server.Version}}'
+```
+
+Membership of the `docker` group gives the same power as root on that host.
+PAIR runs the container as your user, gives it only the `/dev/accel` nodes,
+and never uses `--privileged`.
+
+## 5. Let the SoCs reach each other
+
+A model compiled for more than one SoC sends data between the SoCs through the
+card's PCIe switch. On many hosts, ACS redirect is on for the switch ports, and
+the IOMMU then blocks that traffic. The engine fails with
+`Failed to access P2P device`. All SoCs still appear in `lspci`, so nothing
+looks wrong until a multi-SoC model starts. Without this step, PAIR offers only
+models compiled for 1 SoC.
+
+Find the switch port above each SoC. It is the parent directory of the SoC in
+sysfs:
+
+```bash
+for soc in $(lspci -D -d 17cb: | awk '/a100/ {print $1}'); do
+  basename "$(dirname "$(readlink -f /sys/bus/pci/devices/$soc)")"
+done
+```
+
+Add the ports to the kernel command line. In `/etc/default/grub`, add them to
+`GRUB_CMDLINE_LINUX_DEFAULT`, inside single quotes, because GRUB reads a bare `;`
+as the end of a command:
+
+```text
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash 'pci=disable_acs_redir=0000:cb:00.0;0000:cb:01.0;0000:cb:02.0;0000:cb:03.0'"
+```
+
+Then run `sudo update-grub` and reboot. After the reboot, check both:
+
+```bash
+grep -o 'pci=disable_acs_redir=[^ ]*' /proc/cmdline
+journalctl -k -b | grep 'Configured ACS'   # one line per port, "0x0011"
+```
+
+With Secure Boot on, the kernel is in lockdown, so `setpci` cannot change ACS
+while the host runs. The kernel parameter is the only way.
+
+The port addresses can change if you move the card or add hardware. Check them
+again after any hardware change.
+
+## 6. Install the engine in PAIR
+
+Install the Qualcomm engine from the device's engine list, like any other engine.
+Then download a model from its catalog, select it and start the engine. The
+first start of each model downloads its tokenizer and configuration from Hugging
+Face, so it needs network access.
+
+Starting takes about 30 seconds for Qwen3-30B-A3B. Stopping takes up to about a
+minute: vLLM ignores SIGTERM, so the container is stopped after 30 seconds, and
+the driver then releases the card.
+
+## Models
+
+The catalog lists only QPCs this host can run: no more SoCs than the card has,
+and a multi-SoC QPC only after step 5. Each QPC was downloaded once to pin its
+SHA-256, and PAIR refuses a download whose SHA-256 differs.
+
+The catalog is the ZentreeLabs QPC index. Its owner is not confirmed to be
+Qualcomm.
