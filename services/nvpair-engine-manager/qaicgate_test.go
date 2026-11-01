@@ -73,10 +73,21 @@ func TestQaicGateRefusesAMultiSoCModelWithoutP2P(t *testing.T) {
 	e := gateExecutor(t, func() (qaicHostReady, []qaicHostProblem) {
 		ready, _ := readyFour()
 		ready.P2PAllowed = false
-		return ready, []qaicHostProblem{{Message: "The card's SoCs cannot reach each other.", Fix: "Add the kernel parameter pci=disable_acs_redir=0000:cb:00.0 and reboot."}}
+		return ready, []qaicHostProblem{{Message: "The card's SoCs cannot reach each other.", Fix: "Add the kernel parameter pci=disable_acs_redir=0000:cb:00.0 and reboot.", Check: qaicCheckP2P}}
 	})
 	err := e.qaicGate("qaic", "Qwen/Qwen3-30B-A3B")
 	if err == nil || !strings.Contains(err.Error(), "disable_acs_redir") {
 		t.Fatalf("qaicGate() = %v, want the ACS problem and its fix", err)
+	}
+}
+
+func TestQaicGateRefusesAMultiSoCModelWithoutAP2PProblem(t *testing.T) {
+	e := gateExecutor(t, func() (qaicHostReady, []qaicHostProblem) {
+		ready, _ := readyFour()
+		ready.P2PAllowed = false
+		return ready, nil
+	})
+	if err := e.qaicGate("qaic", "Qwen/Qwen3-30B-A3B"); err == nil || !strings.Contains(err.Error(), "reach each other") {
+		t.Fatalf("qaicGate() = %v, want a refusal even with no P2P problem in the list", err)
 	}
 }

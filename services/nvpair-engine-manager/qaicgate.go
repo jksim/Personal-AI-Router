@@ -23,13 +23,20 @@ func checkQAICHostNow() (qaicHostReady, []qaicHostProblem) {
 	return currentQAICHost(dockerUsable())
 }
 
-// dockerUsable reports whether this user can reach the Docker daemon without sudo.
+// dockerUsable reports whether this user can reach the Docker daemon without
+// sudo. Its error is the user-facing message.
 func dockerUsable() error {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return errors.New("Docker is not installed.")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), qaicDockerTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "docker", "version", "--format", "{{.Server.Version}}").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+		if detail := strings.TrimSpace(string(out)); detail != "" {
+			return fmt.Errorf("This user cannot reach the Docker daemon: %s", detail)
+		}
+		return fmt.Errorf("This user cannot reach the Docker daemon: %v.", err)
 	}
 	return nil
 }
@@ -38,18 +45,28 @@ func dockerUsable() error {
 // cannot support. model is the model to start, or "" for an install. Other
 // engines pass through unchecked.
 func (e *Executor) qaicGate(engine, model string) error {
+	return e.qaicCheck(engine, model, true)
+}
+
+// qaicCheck is qaicGate with Docker optional: a pull downloads a QPC and does
+// not run the container.
+func (e *Executor) qaicCheck(engine, model string, needDocker bool) error {
 	if engine != engines.NameQaic {
 		return nil
 	}
 	ready, problems := e.qaicHost()
-	if !ready.ok() {
-		var parts []string
-		for _, p := range problems {
-			if p.Blocking {
-				parts = append(parts, p.Message+" "+p.Fix)
-			}
+	var blocking []string
+	var p2p *qaicHostProblem
+	for i, p := range problems {
+		switch {
+		case p.Check == qaicCheckP2P:
+			p2p = &problems[i]
+		case p.Blocking && (needDocker || p.Check != qaicCheckDocker):
+			blocking = append(blocking, p.Message+" "+p.Fix)
 		}
-		return errors.New(strings.Join(parts, " "))
+	}
+	if len(blocking) > 0 {
+		return errors.New(strings.Join(blocking, " "))
 	}
 	if model == "" {
 		return nil
@@ -66,11 +83,11 @@ func (e *Executor) qaicGate(engine, model string) error {
 			return fmt.Errorf("%s is compiled for %d SoCs, and this card has %d that answered.", model, entry.Devices, ready.SoCCount)
 		}
 		if entry.Devices > 1 && !ready.P2PAllowed {
-			for _, p := range problems {
-				if !p.Blocking {
-					return fmt.Errorf("%s needs %d SoCs that reach each other. %s %s", model, entry.Devices, p.Message, p.Fix)
-				}
+			reason := "The card's SoCs cannot reach each other."
+			if p2p != nil {
+				reason = p2p.Message + " " + p2p.Fix
 			}
+			return fmt.Errorf("%s needs %d SoCs that reach each other. %s", model, entry.Devices, reason)
 		}
 	}
 	return nil

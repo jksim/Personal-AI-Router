@@ -168,3 +168,13 @@ func TestQAICHostOneSoCNeedsNoP2P(t *testing.T) {
 		t.Fatalf("ready = %+v, problems = %+v; one SoC sends nothing to another", ready, problems)
 	}
 }
+
+func TestQAICHostACSParameterInQuotes(t *testing.T) {
+	cmdline := `ro "pci=disable_acs_redir=0000:cb:00.0;0000:cb:01.0;0000:cb:02.0;0000:cb:03.0"`
+
+	ready, _ := checkQAICHost(ultraSoCs(4), nil, cmdline, nil)
+
+	if !ready.P2PAllowed {
+		t.Fatal("a quoted pci= token was not read")
+	}
+}

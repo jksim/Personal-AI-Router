@@ -36,7 +36,16 @@ type qaicHostProblem struct {
 	Message  string
 	Fix      string
 	Blocking bool
+	Check    string
 }
+
+// The checks a problem can come from. A pull downloads a QPC and needs no
+// Docker, so it skips the Docker check.
+const (
+	qaicCheckCard   = "card"
+	qaicCheckDocker = "docker"
+	qaicCheckP2P    = "p2p"
+)
 
 const qaicHostSetupDoc = "See docs/qaic-host-setup.mdx."
 
@@ -60,12 +69,14 @@ func checkQAICHost(socs []accel.QAICSoCState, inspectErr error, cmdline string, 
 			Message:  fmt.Sprintf("Could not list the PCI devices: %v.", inspectErr),
 			Fix:      "Check that /sys is mounted and readable.",
 			Blocking: true,
+			Check:    qaicCheckCard,
 		})
 	} else if len(socs) == 0 {
 		problems = append(problems, qaicHostProblem{
 			Message:  "No Qualcomm Cloud AI 100 card was found.",
 			Fix:      "Install a card, or check that `lspci -d 17cb:` lists it.",
 			Blocking: true,
+			Check:    qaicCheckCard,
 		})
 	}
 	ready.CardPresent = inspectErr == nil && len(socs) > 0
@@ -90,6 +101,7 @@ func checkQAICHost(socs []accel.QAICSoCState, inspectErr error, cmdline string, 
 			Message:  fmt.Sprintf("This user cannot open %s.", strings.Join(denied, ", ")),
 			Fix:      "Install the udev rule that gives a group access to /dev/accel, and add this user to that group. " + qaicHostSetupDoc,
 			Blocking: true,
+			Check:    qaicCheckCard,
 		})
 	}
 	if len(silent) > 0 {
@@ -97,6 +109,7 @@ func checkQAICHost(socs []accel.QAICSoCState, inspectErr error, cmdline string, 
 			Message:  fmt.Sprintf("The card did not answer from %s.", strings.Join(silent, ", ")),
 			Fix:      "Make sure the card is powered on and all of its SoCs have started, then try again.",
 			Blocking: true,
+			Check:    qaicCheckCard,
 		})
 	}
 	if len(noHwmon) > 0 {
@@ -104,15 +117,17 @@ func checkQAICHost(socs []accel.QAICSoCState, inspectErr error, cmdline string, 
 			Message:  fmt.Sprintf("No qaic temperature sensor was found for %s.", strings.Join(noHwmon, ", ")),
 			Fix:      "Load the kernel module that creates the qaic hwmon, so the card's temperature can be watched. " + qaicHostSetupDoc,
 			Blocking: true,
+			Check:    qaicCheckCard,
 		})
 	}
 
 	ready.DockerUsable = dockerErr == nil
 	if dockerErr != nil {
 		problems = append(problems, qaicHostProblem{
-			Message:  fmt.Sprintf("Docker cannot be used without sudo: %v.", dockerErr),
+			Message:  dockerErr.Error(),
 			Fix:      "Install Docker, and add this user to the docker group. " + qaicHostSetupDoc,
 			Blocking: true,
+			Check:    qaicCheckDocker,
 		})
 	}
 
@@ -125,6 +140,7 @@ func checkQAICHost(socs []accel.QAICSoCState, inspectErr error, cmdline string, 
 		problems = append(problems, qaicHostProblem{
 			Message: "The card's SoCs cannot reach each other, because ACS redirect is on in its PCIe switch. Only models compiled for 1 SoC can run.",
 			Fix:     "Add the kernel parameter pci=disable_acs_redir=" + strings.Join(ports, ";") + " and reboot. " + qaicHostSetupDoc,
+			Check:   qaicCheckP2P,
 		})
 	}
 	return ready, problems
@@ -156,6 +172,7 @@ func disabledACSRedirect(cmdline string) (map[string]bool, map[string]bool) {
 	addresses := map[string]bool{}
 	ids := map[string]bool{}
 	for _, token := range strings.Fields(cmdline) {
+		token = strings.Trim(token, `"'`)
 		value, ok := strings.CutPrefix(token, "pci=")
 		if !ok {
 			continue
