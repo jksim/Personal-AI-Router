@@ -51,7 +51,8 @@ const proxyPorts: Record<EngineType, number | null> = {
     ollama: 11434,
     'lm-studio': 1234,
     'llama-cpp': 8080,
-    max: 8000
+    max: 8000,
+    qaic: 8100
 }
 
 /** Model inventory each probe returns. Mutable so a test can return none. */
@@ -131,7 +132,7 @@ import {
 } from '@/electron/inference-demo'
 
 /** Ports the demo is allowed to target: proxy facades only. */
-const PROXY_FACADE_PORTS = [11434, 1234, 8080, 8000]
+const PROXY_FACADE_PORTS = [11434, 1234, 8080, 8000, 8100]
 
 function portOf(record: SpawnRecord): number {
     return Number(record.args[record.args.indexOf('--port') + 1])

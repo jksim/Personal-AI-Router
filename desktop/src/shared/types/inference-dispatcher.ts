@@ -10,7 +10,7 @@
  * reads its `--list-models` inventory.
  */
 
-export type DispatcherBackend = 'ollama' | 'lmstudio' | 'llamacpp' | 'max'
+export type DispatcherBackend = 'ollama' | 'lmstudio' | 'llamacpp' | 'max' | 'qaic'
 
 /** One entry from the binary's `--list-models` JSON inventory. */
 export interface DispatcherModel {

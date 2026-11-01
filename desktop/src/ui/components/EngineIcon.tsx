@@ -52,6 +52,28 @@ export default function EngineIcon({ type, size = 32 }: { type: EngineType; size
     // icons are bundled vendor artwork; redistributing a third party's mark
     // from a fork is a trademark question this does not need to raise, and a
     // missing icon would render nothing at all.
+    if (type === 'qaic') {
+        return (
+            <div style={{ ...containerStyle, backgroundColor: '#0b0b0f' }}>
+                <svg viewBox="0 0 64 64" style={imgStyle} role="img" aria-label="Qualcomm AI 100">
+                    <title>Qualcomm AI 100</title>
+                    <rect width="64" height="64" fill="#0b0b0f" />
+                    <text
+                        x="32"
+                        y="40"
+                        textAnchor="middle"
+                        fontFamily="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+                        fontSize="17"
+                        fontWeight="700"
+                        letterSpacing="0.5"
+                        fill="#f5f5f7"
+                    >
+                        AI100
+                    </text>
+                </svg>
+            </div>
+        )
+    }
     if (type === 'max') {
         return (
             <div style={{ ...containerStyle, backgroundColor: '#0b0b0f' }}>

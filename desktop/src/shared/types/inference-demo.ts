@@ -60,7 +60,8 @@ export const DEMO_ENGINE_PROBES: readonly {
     { backend: 'ollama', proxyEngine: 'ollama' },
     { backend: 'lmstudio', proxyEngine: 'lm-studio' },
     { backend: 'llamacpp', proxyEngine: 'llama-cpp' },
-    { backend: 'max', proxyEngine: 'max' }
+    { backend: 'max', proxyEngine: 'max' },
+    { backend: 'qaic', proxyEngine: 'qaic' }
 ]
 
 /**

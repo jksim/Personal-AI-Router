@@ -16,8 +16,8 @@ import { gatewayEndpointDisplayUrl } from '@/ui/utils/gateway-inference-paths'
 
 describe('engine identity', () => {
     it('enables llama.cpp workflows on every platform', () => {
-        expect(EngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp', 'max'])
-        expect(EnabledEngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp', 'max'])
+        expect(EngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp', 'max', 'qaic'])
+        expect(EnabledEngineTypes).toEqual(['ollama', 'lm-studio', 'llama-cpp', 'max', 'qaic'])
         expect(getWelcomeEngineCandidates('Windows')).toContain('llama-cpp')
         expect(getWelcomeEngineCandidates('MacOS')).toContain('llama-cpp')
         expect(getWelcomeEngineCandidates('Linux')).toContain('llama-cpp')
@@ -29,12 +29,19 @@ describe('engine identity', () => {
         expect(getWelcomeEngineCandidates('MacOS')).not.toContain('max')
     })
 
-    it('preselects every engine but the opt-in MAX during onboarding', () => {
+    it('offers the Qualcomm engine only where its driver exists', () => {
+        expect(getWelcomeEngineCandidates('Linux')).toContain('qaic')
+        expect(getWelcomeEngineCandidates('Windows')).not.toContain('qaic')
+        expect(getWelcomeEngineCandidates('MacOS')).not.toContain('qaic')
+    })
+
+    it('preselects every engine but the opt-in MAX and Qualcomm engine during onboarding', () => {
         expect(WELCOME_ENGINE_DEFAULT_SELECTED).toEqual({
             ollama: true,
             'lm-studio': true,
             'llama-cpp': true,
-            max: false
+            max: false,
+            qaic: false
         })
     })
 

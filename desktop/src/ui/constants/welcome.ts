@@ -18,7 +18,8 @@ export const WELCOME_ENGINE_DEFAULT_SELECTED: Record<EngineType, boolean> = {
     // Not pre-selected on first run: MAX is a ~1.2 GB install that only pays
     // off once a model is chosen for it, so it is opt-in rather than something
     // a new user downloads by accident.
-    max: false
+    max: false,
+    qaic: false
 }
 
 export function getWelcomeEngineCandidates(os: PlatformDisplayName): EngineType[] {

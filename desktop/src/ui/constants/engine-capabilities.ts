@@ -83,5 +83,27 @@ export const EngineCapabilities: Record<EngineType, EngineCaps> = {
         // which other tools on the machine may be using. Not offered.
         hasDeleteModel: false,
         engineHub: { label: 'Modular', url: 'https://builds.modular.com/' }
+    },
+    qaic: {
+        hasExpiry: false,
+        // One model per process, as for MAX: the model is unloaded by stopping
+        // the engine or by selecting another, which relaunches it.
+        hasEject: false,
+        // Qualcomm's qaic driver is Linux only.
+        hasInstall: ['linux'],
+        hasEnginePort: true,
+        hasInstallPath: false,
+        hasProxyWebUI: false,
+        hasPreferredNode: false,
+        hasCrashAlert: false,
+        hasModelSearchOnlyWhenRunning: false,
+        modelOpsWhenStopped: true,
+        // QPCs live in the engine's own models directory, so deleting one
+        // touches nothing another tool uses.
+        hasDeleteModel: true,
+        engineHub: {
+            label: 'Qualcomm Cloud AI',
+            url: 'https://github.com/qualcomm/cloud-ai-containers'
+        }
     }
 }

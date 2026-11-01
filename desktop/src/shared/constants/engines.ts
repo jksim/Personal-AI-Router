@@ -5,11 +5,11 @@ import { EngineType, ModelExpiry } from '@/shared/types/engines'
 
 // The engines `nvpair-engine-manager` ships a manifest for, and therefore the
 // only ones PAIR can install, run or route to.
-export const EngineTypes = ['ollama', 'lm-studio', 'llama-cpp', 'max'] as const
+export const EngineTypes = ['ollama', 'lm-studio', 'llama-cpp', 'max', 'qaic'] as const
 
 // Kept as a distinct export so a future engine can ship behind it rather than
 // appearing the moment its type exists.
-export const EnabledEngineTypes: EngineType[] = ['ollama', 'lm-studio', 'llama-cpp', 'max']
+export const EnabledEngineTypes: EngineType[] = ['ollama', 'lm-studio', 'llama-cpp', 'max', 'qaic']
 
 /**
  * How `nvpair-engine-manager` spells each engine on the wire. This is the
@@ -20,7 +20,8 @@ export const EngineManagerNames = {
     ollama: 'ollama',
     'lm-studio': 'lmstudio',
     'llama-cpp': 'llamacpp',
-    max: 'max'
+    max: 'max',
+    qaic: 'qaic'
 } as const satisfies Record<EngineType, string>
 
 export const EngineSources = ['bundled', 'detected', 'installed'] as const
@@ -29,7 +30,8 @@ export const EngineDisplayNames: Record<EngineType, string> = {
     ollama: 'Ollama',
     'lm-studio': 'LM Studio',
     'llama-cpp': 'llama.cpp',
-    max: 'MAX'
+    max: 'MAX',
+    qaic: 'Qualcomm AI 100'
 } as const
 
 /** Default docs/install URLs for built-in backends. Single source of truth for UI and adapter buildInfo(). */
@@ -43,6 +45,10 @@ export const EngineDefaultLinks: Record<EngineType, { docsUrl: string; installUr
     max: {
         docsUrl: 'https://docs.modular.com/max/',
         installUrl: 'https://docs.modular.com/max/packages'
+    },
+    qaic: {
+        docsUrl: 'https://qualcomm.github.io/cloud-ai-sdk-pages/latest/',
+        installUrl: 'https://github.com/qualcomm/cloud-ai-containers'
     }
 } as const
 
