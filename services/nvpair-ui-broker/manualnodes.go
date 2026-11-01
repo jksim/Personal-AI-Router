@@ -32,6 +32,9 @@ type manualNodeStatus struct {
 	MaxUp          bool        `json:"max_up"`
 	MaxPort        int         `json:"max_port"`
 	MaxModels      []string    `json:"max_models,omitempty"`
+	QaicUp         bool        `json:"qaic_up"`
+	QaicPort       int         `json:"qaic_port"`
+	QaicModels     []string    `json:"qaic_models,omitempty"`
 	NodeInfoPort   int         `json:"node_info_port"`
 	GPUs           []GPUInfo   `json:"gpus"`
 	CPU            *CPUInfo    `json:"cpu"`
@@ -91,7 +94,7 @@ func manualToEnriched(s manualNodeStatus) EnrichedNode {
 		GPUs:           s.GPUs,
 		CPU:            s.CPU,
 		Memory:         s.Memory,
-		Models:         mergeModels(s.OllamaModels, s.LMStudioModels, s.MaxModels),
+		Models:         mergeModels(s.OllamaModels, s.LMStudioModels, s.MaxModels, s.QaicModels),
 		ModelsByEngine: manualModelsByEngine(s),
 	}
 	if s.Address != "" {
@@ -102,7 +105,7 @@ func manualToEnriched(s manualNodeStatus) EnrichedNode {
 
 // manualModelsByEngine builds the per-engine attribution for a manual node from
 // the per-engine lists the prober already collected, keyed by the same
-// engine-manager engine names discovered nodes use ("ollama", "lmstudio", "max") so the
+// engine-manager engine names discovered nodes use ("ollama", "lmstudio", "max", "qaic") so the
 // two discovery sources present ModelsByEngine identically. An engine with no
 // models adds no key; returns nil when neither engine reports any.
 func manualModelsByEngine(s manualNodeStatus) map[string][]string {
@@ -115,6 +118,9 @@ func manualModelsByEngine(s manualNodeStatus) map[string][]string {
 	}
 	if len(s.MaxModels) > 0 {
 		byEngine["max"] = s.MaxModels
+	}
+	if len(s.QaicModels) > 0 {
+		byEngine["qaic"] = s.QaicModels
 	}
 	if len(byEngine) == 0 {
 		return nil
@@ -189,6 +195,8 @@ func (s manualNodeStatus) engineReachability(engine string) (up bool, port int, 
 		return s.LMStudioUp, s.LMStudioPort, s.LMStudioModels
 	case "max":
 		return s.MaxUp, s.MaxPort, s.MaxModels
+	case "qaic":
+		return s.QaicUp, s.QaicPort, s.QaicModels
 	}
 	return false, 0, nil
 }

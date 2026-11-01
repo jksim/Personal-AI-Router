@@ -1,0 +1,140 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 Jarrett Simerson
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import (
+	"encoding/json"
+	"net"
+	"nvpair-shared/engines"
+	"reflect"
+	"testing"
+)
+
+// qaicManualFrame is a node/discovered payload as nvpair-manual-nodes emits it
+// for a node running all three engines. It is a literal rather than a
+// marshalled struct on purpose: the two structs live in separate Go modules and
+// nothing but their JSON tags connects them, so a copy of the real wire text is
+// what actually pins the contract. Renaming a tag on either side fails here.
+const qaicManualFrame = `{
+  "id": "manual:10.0.0.9",
+  "address": "10.0.0.9",
+  "ollama_up": true,
+  "ollama_port": 11434,
+  "ollama_models": ["llama3"],
+  "lmstudio_up": true,
+  "lmstudio_port": 1234,
+  "lmstudio_models": ["qwen2.5"],
+  "qaic_up": true,
+  "qaic_port": 8100,
+  "qaic_models": ["Qwen/Qwen3-30B-A3B"],
+  "node_info_port": 14318,
+  "telemetryValid": true,
+  "msSince": 120
+}`
+
+func TestManualNodeStatusDecodesTheQaicFields(t *testing.T) {
+	var status manualNodeStatus
+	if err := json.Unmarshal([]byte(qaicManualFrame), &status); err != nil {
+		t.Fatalf("decode manual node frame: %v", err)
+	}
+	if !status.QaicUp || status.QaicPort != qaicFacadePort(t) {
+		t.Fatalf("qaic reachability = (%v, %d), want (true, %d)", status.QaicUp, status.QaicPort, qaicFacadePort(t))
+	}
+	if want := []string{"Qwen/Qwen3-30B-A3B"}; !reflect.DeepEqual(status.QaicModels, want) {
+		t.Fatalf("qaic models = %v, want %v", status.QaicModels, want)
+	}
+
+	enriched := manualToEnriched(status)
+	wantModels := []string{"llama3", "qwen2.5", "Qwen/Qwen3-30B-A3B"}
+	if !reflect.DeepEqual(enriched.Models, wantModels) {
+		t.Fatalf("merged models = %v, want %v", enriched.Models, wantModels)
+	}
+	wantByEngine := map[string][]string{
+		"ollama":   {"llama3"},
+		"lmstudio": {"qwen2.5"},
+		"qaic":     {"Qwen/Qwen3-30B-A3B"},
+	}
+	if !reflect.DeepEqual(enriched.ModelsByEngine, wantByEngine) {
+		t.Fatalf("models by engine = %v, want %v", enriched.ModelsByEngine, wantByEngine)
+	}
+}
+
+// TestBridgeManualNodeReachesTheQaicProxy pins both directions of the bridge. A
+// manual node never appears in the discovery relay's snapshots, so without this
+// explicit add the Qualcomm engine proxy cannot route to it at all; and without the matching
+// remove it would keep routing to an engine that has gone away.
+func TestBridgeManualNodeReachesTheQaicProxy(t *testing.T) {
+	proxyClient, proxyServer := net.Pipe()
+	t.Cleanup(func() {
+		_ = proxyClient.Close()
+		_ = proxyServer.Close()
+	})
+	proxy := &proxyProcess{peer: NewPeer(NewCodec(proxyClient))}
+	go proxy.peer.Serve(nil, nil)
+
+	type call struct {
+		method string
+		params json.RawMessage
+	}
+	calls := make(chan call, 4)
+	go func() {
+		codec := NewCodec(proxyServer)
+		for {
+			msg, err := codec.Read()
+			if err != nil {
+				return
+			}
+			calls <- call{method: msg.Method, params: msg.Params}
+			_ = codec.Respond(msg.ID, map[string]bool{"ok": true})
+		}
+	}()
+
+	b := &Broker{}
+	qaicProfile, ok := engineProxyProfileFor("qaic")
+	if !ok {
+		t.Fatal("qaic is not in the shared engine table")
+	}
+	b.setEngineProxyHandle(qaicProfile, proxy)
+
+	var status manualNodeStatus
+	if err := json.Unmarshal([]byte(qaicManualFrame), &status); err != nil {
+		t.Fatalf("decode manual node frame: %v", err)
+	}
+	b.bridgeManualNode(status, "host-uuid")
+
+	got := nextManualCall(t, calls)
+	if got.method != engines.AddressMethod("qaic", "node/add-manual") {
+		t.Fatalf("bridge method = %q, want the qaic-addressed node/add-manual", got.method)
+	}
+	var node proxyManualNode
+	if err := json.Unmarshal(got.params, &node); err != nil {
+		t.Fatalf("decode add-manual params: %v", err)
+	}
+	if node.ID != "host-uuid" || node.Port != qaicFacadePort(t) || node.Host != "10.0.0.9" {
+		t.Fatalf("bridged node = %+v, want the Qualcomm engine engine keyed by host uuid", node)
+	}
+
+	status.QaicUp = false
+	b.bridgeManualNode(status, "host-uuid")
+	if got := nextManualCall(t, calls); got.method != engines.AddressMethod("qaic", "node/remove-manual") {
+		t.Fatalf("unreachable Qualcomm engine produced %q, want the qaic-addressed node/remove-manual", got.method)
+	}
+
+	b.removeManualNodeFromProxies("host-uuid")
+	if got := nextManualCall(t, calls); got.method != engines.AddressMethod("qaic", "node/remove-manual") {
+		t.Fatalf("node removal produced %q, want the qaic-addressed node/remove-manual", got.method)
+	}
+}
+
+// qaicFacadePort is the Qualcomm engine's client-facing port, read from the shared engine table
+// rather than repeated here: a second declaration could drift from the one the
+// proxy and broker actually use.
+func qaicFacadePort(t *testing.T) int {
+	t.Helper()
+	e, ok := engines.ByName("qaic")
+	if !ok {
+		t.Fatal("qaic is not in the shared engine table")
+	}
+	return e.FacadePort
+}

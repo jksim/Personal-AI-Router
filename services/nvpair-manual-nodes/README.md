@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # nvpair-manual-nodes
 
-A Go service for managing manually configured nodes on networks where mDNS discovery is unavailable. Accepts node addresses via JSON-RPC, probes each for Ollama, LM Studio, and node-info, and emits status events.
+A Go service for managing manually configured nodes on networks where mDNS discovery is unavailable. Accepts node addresses via JSON-RPC, probes each for Ollama, LM Studio, MAX, the Qualcomm engine, and node-info, and emits status events.
 
 ## Communication
 
@@ -60,7 +60,7 @@ Emitted when a manually added node has been probed and its initial status determ
 }
 ```
 
-Each node is probed for both inference engines: Ollama on its default `:11434` (`GET /` + `/api/tags`) and LM Studio on its default `:1234` (`GET /v1/models`, which doubles as the liveness check and the model list). `lmstudio_up` / `lmstudio_port` / `lmstudio_models` mirror the `ollama_*` fields and let a supervising broker bridge the node into that engine's `nvpair-proxy` instance the same way it bridges Ollama into its own. A node can run either engine, both, or neither.
+Each node is probed for each inference engine: Ollama on its default `:11434` (`GET /` + `/api/tags`) and LM Studio on its default `:1234` (`GET /v1/models`, which doubles as the liveness check and the model list). `lmstudio_up` / `lmstudio_port` / `lmstudio_models` mirror the `ollama_*` fields and let a supervising broker bridge the node into that engine's `nvpair-proxy` instance the same way it bridges Ollama into its own. MAX on `:8000` and the Qualcomm engine on `:8100` are probed the same way as LM Studio, and report `max_*` and `qaic_*` fields. A node can run any of these engines, or none.
 
 ### `node/updated`
 
@@ -136,6 +136,7 @@ Each manual node is probed every 10 seconds, with a 3-second timeout per leg, fo
 
 - **Ollama** on port 11434: health check (`GET /`) and model list (`GET /api/tags`)
 - **LM Studio** on port 1234: `GET /v1/models`, which doubles as the liveness check and the model list
+- **MAX** on port 8000 and the **Qualcomm engine** on port 8100: `GET /v1/models`, the same check
 - **Node Info** on port 14318, or `tls_port` over HTTPS: hardware inventory and identity (`GET /v1/node-info`)
 
 A node can have any combination of these, or none if the target is unreachable. Status changes trigger `node/updated` events. Because change detection compares CPU, memory, and GPU values, a node running node-info emits a `node/updated` on most probe cycles as utilization moves.

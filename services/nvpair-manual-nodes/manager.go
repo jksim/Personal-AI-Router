@@ -136,6 +136,9 @@ type ManualNodeStatus struct {
 	MaxUp          bool        `json:"max_up"`
 	MaxPort        int         `json:"max_port"`
 	MaxModels      []string    `json:"max_models,omitempty"`
+	QaicUp         bool        `json:"qaic_up"`
+	QaicPort       int         `json:"qaic_port"`
+	QaicModels     []string    `json:"qaic_models,omitempty"`
 	NodeInfoUp     bool        `json:"node_info_up"`
 	NodeInfoPort   int         `json:"node_info_port"`
 	TLSEnabled     bool        `json:"tls_enabled,omitempty"`
@@ -275,6 +278,7 @@ func (m *Manager) probeNode(entry ManualEntry) {
 	ollamaUp, ollamaModels := m.probeOllama(addr, 11434)
 	lmStudioUp, lmStudioModels := m.probeLMStudio(addr, lmStudioPort)
 	maxUp, maxModels := m.probeMax(addr, maxPort)
+	qaicUp, qaicModels := m.probeQaic(addr, qaicPort)
 
 	// Pick scheme + port + client based on the entry's TLS hint.
 	// The operator decides which scheme this manual node uses; we
@@ -315,6 +319,9 @@ func (m *Manager) probeNode(entry ManualEntry) {
 		MaxUp:          maxUp,
 		MaxPort:        maxPort,
 		MaxModels:      maxModels,
+		QaicUp:         qaicUp,
+		QaicPort:       qaicPort,
+		QaicModels:     qaicModels,
 		NodeInfoUp:     nodeInfoUp,
 		NodeInfoPort:   nodeInfoPort,
 		TLSEnabled:     entry.TLSPort > 0,
@@ -327,7 +334,7 @@ func (m *Manager) probeNode(entry ManualEntry) {
 		HostUUID:       info.HostUUID,
 	}
 
-	reachable := newStatus.OllamaUp || newStatus.LMStudioUp || newStatus.MaxUp || newStatus.NodeInfoUp
+	reachable := newStatus.OllamaUp || newStatus.LMStudioUp || newStatus.MaxUp || newStatus.QaicUp || newStatus.NodeInfoUp
 
 	m.mu.Lock()
 	tn, exists := m.nodes[id]
@@ -357,11 +364,13 @@ func (m *Manager) probeNode(entry ManualEntry) {
 	changed := prev.OllamaUp != newStatus.OllamaUp ||
 		prev.LMStudioUp != newStatus.LMStudioUp ||
 		prev.MaxUp != newStatus.MaxUp ||
+		prev.QaicUp != newStatus.QaicUp ||
 		prev.NodeInfoUp != newStatus.NodeInfoUp ||
 		prev.HostUUID != newStatus.HostUUID ||
 		!sliceEqual(prev.OllamaModels, newStatus.OllamaModels) ||
 		!sliceEqual(prev.LMStudioModels, newStatus.LMStudioModels) ||
 		!sliceEqual(prev.MaxModels, newStatus.MaxModels) ||
+		!sliceEqual(prev.QaicModels, newStatus.QaicModels) ||
 		!gpusEqual(prev.GPUs, newStatus.GPUs) ||
 		!cpuEqual(prev.CPU, newStatus.CPU) ||
 		!memoryEqual(prev.Memory, newStatus.Memory) ||
