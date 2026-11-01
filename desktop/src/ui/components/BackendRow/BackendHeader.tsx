@@ -253,7 +253,6 @@ export function BackendHeader({
                 <InstallButton
                     backend={backend}
                     targetOs={targetOs}
-                    isLocalNode={isLocalNode}
                     disabled={disabled}
                     onInstall={onInstall}
                 />
