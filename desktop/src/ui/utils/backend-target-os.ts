@@ -15,3 +15,18 @@ export function canAutoInstallBackendForOs(
     const platforms = EngineCapabilities[backendType].hasInstall
     return platforms.includes(targetPlatform)
 }
+
+/**
+ * Whether to offer the vendor's manual Download link on this OS. Only for an
+ * engine PAIR installs on no OS: an engine PAIR installs elsewhere but not here
+ * cannot run here, and a link would promise otherwise.
+ */
+export function offersManualDownloadForOs(
+    backendType: EngineType,
+    targetOs: PlatformDisplayName
+): boolean {
+    return (
+        !canAutoInstallBackendForOs(backendType, targetOs) &&
+        EngineCapabilities[backendType].hasInstall.length === 0
+    )
+}

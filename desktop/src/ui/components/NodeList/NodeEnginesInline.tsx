@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { EnabledEngineTypes, EngineDisplayNames } from '@/shared/constants/engines'
+import { EnabledEngineTypes } from '@/shared/constants/engines'
 import { EngineType } from '@/shared/types/engines'
 import { useEngineStatusStore } from '@/ui/stores/engine-status.store'
 import { useConnectionStore } from '@/ui/stores/connection.store'
 import { useNodesStore } from '@/ui/stores/nodes.store'
 import { usePendingActionsStore } from '@/ui/stores/pending-actions.store'
 import { getEnginesForNode } from '@/ui/utils/get-engines-for-node'
+import { inlineEngineEntries } from '@/ui/utils/inline-engines'
 import { Button, Flex, Switch, Text } from '@nvidia/foundations-react-core'
 import { Download } from '@/ui/components/icons'
 import { useCallback, useMemo } from 'react'
@@ -33,29 +34,12 @@ export default function NodeEnginesInline({ nodeId }: { nodeId: string }) {
         [nodeId, statusByNode]
     )
 
-    const allBackends = useMemo(() => {
-        return EnabledEngineTypes.flatMap(type => {
-            const backend = selfEngines.find(b => b.engineType === type)
-
-            // Show every engine the node has actually reported — not just ones
-            // with a proxy port. The broker fronts only Ollama with a proxy, so
-            // gating on `proxyPort` hid LM Studio (managed by nvpair-engine-manager,
-            // loopback-only, no proxy). Skip the padded `initializing`
-            // placeholder so engines a node never reports (e.g. LM Studio on a
-            // remote, undiscovered node) don't show a perpetual spinner.
-            if (!backend || backend.processStatus === 'initializing') {
-                return []
-            }
-
-            return [
-                {
-                    type,
-                    name: EngineDisplayNames[type],
-                    status: backend.processStatus
-                }
-            ]
-        })
-    }, [selfEngines])
+    const nodeOs = useNodesStore(state => state.nodes.get(nodeId)?.os)
+    const targetOs = nodeOs ?? window.windowApi.platform
+    const allBackends = useMemo(
+        () => inlineEngineEntries(selfEngines, targetOs),
+        [selfEngines, targetOs]
+    )
 
     const handleToggle = useCallback(
         (engineType: EngineType) => {

@@ -6,7 +6,7 @@ import { Button, Flex, Stack, Text } from '@nvidia/foundations-react-core'
 import { OpenInNew } from '@/ui/components/icons'
 import type { BackendInfo } from '@/ui/types/engine-info'
 import type { PlatformDisplayName } from '@/shared/types/platform'
-import { canAutoInstallBackendForOs } from '@/ui/utils/backend-target-os'
+import { canAutoInstallBackendForOs, offersManualDownloadForOs } from '@/ui/utils/backend-target-os'
 import { DismissibleTooltip } from '@/ui/components/DismissibleTooltip/DismissibleTooltip'
 import { useDismissibleTooltipTrigger } from '@/ui/hooks/use-dismissible-tooltip-trigger'
 
@@ -24,6 +24,7 @@ export function InstallButton({
     onInstall: () => void
 }) {
     const autoInstall = canAutoInstallBackendForOs(backend.type, targetOs)
+    const manualDownload = offersManualDownloadForOs(backend.type, targetOs)
     const isNotInstalled = backend.processStatus === 'not-installed'
     const missingPrereqs = (backend.prerequisites ?? []).filter(p => !p.installed)
     const prereqsMet = missingPrereqs.length === 0
@@ -38,7 +39,7 @@ export function InstallButton({
 
     return (
         <>
-            {!autoInstall && isLocalNode && isNotInstalled && backend.installUrl && (
+            {manualDownload && isLocalNode && isNotInstalled && backend.installUrl && (
                 <button
                     type="button"
                     onClick={e => openLink(e, backend.installUrl!)}
