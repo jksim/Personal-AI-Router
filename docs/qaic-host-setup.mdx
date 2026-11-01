@@ -55,8 +55,19 @@ sudo usermod -aG render "$USER"   # then log out and in again
 ## 3. Load the card's temperature sensor
 
 PAIR reads each SoC's temperature from a hwmon device named `qaic`. The in-tree
-driver does not create one; the Qualcomm kernel module that does is a separate
-install. Check that every SoC has one:
+`qaic` driver does not create one. Two kernel modules can:
+
+- **Qualcomm's Platform SDK kernel driver** (`qaic`, in Platform SDK 1.21.6.0)
+  registers a `qaic` hwmon for each SoC. It replaces the in-tree `mhi` driver.
+  Warning: other MHI devices, such as some Wi-Fi cards (`ath11k`), can stop
+  working. Check them before you install it.
+- **`qaic_telemetry`** is a read-only module that keeps the in-tree `qaic` and
+  `mhi`. It reads the card's telemetry channel and registers the `qaic` hwmon. It
+  needs kernel 7.0 or later, and installs with DKMS. With Secure Boot on, enroll
+  the DKMS key with `sudo mokutil --import /var/lib/shim-signed/mok/MOK.der`, then
+  reboot. This module is not published yet.
+
+Check that every SoC has one:
 
 ```bash
 grep -l qaic /sys/class/hwmon/*/name | wc -l   # one per SoC
