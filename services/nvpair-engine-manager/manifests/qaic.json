@@ -14,6 +14,21 @@
         "lines": true
       }
     },
+    "pull_model": {
+      "description": "Download a QPC from the pinned catalog (params: {\"model\": \"<owner/name>\"}). The engine manager runs this itself (qaicpull.go): it streams the download through SHA-256 and tar, and refuses a QPC whose SHA-256 differs. This command runs only if that hook is bypassed.",
+      "cmd": [
+        "sh",
+        "-c",
+        "echo 'the qaic pull_model action is run by the engine manager' >&2; exit 1"
+      ]
+    },
+    "delete_model": {
+      "description": "Delete a downloaded QPC (params: {\"model\": \"<owner/name>\"}).",
+      "remove_path": {
+        "root": "{models_dir}",
+        "path": "{models_dir}/{model}"
+      }
+    },
     "loaded_models": {
       "description": "List the model the Qualcomm engine is serving. It serves one model per process.",
       "http": {

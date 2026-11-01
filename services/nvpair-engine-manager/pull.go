@@ -31,6 +31,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"nvpair-shared/engines"
 )
 
 const (
@@ -113,6 +115,9 @@ func (e *Executor) PullModelStream(ctx context.Context, engine, model string, pa
 	st, err := e.state(engine)
 	if err != nil {
 		return nil, err
+	}
+	if engine == engines.NameQaic {
+		return e.pullQPC(ctx, engine, model, st.modelsDir)
 	}
 	act, ok := st.manifest.Actions[pullModelAction]
 	if !ok {

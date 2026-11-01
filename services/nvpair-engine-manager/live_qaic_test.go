@@ -13,6 +13,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,4 +169,46 @@ func qaicStatusOf(result string) string {
 		return result[i:]
 	}
 	return result[i : i+j]
+}
+
+// TestLiveQaicPull downloads the catalog's Qwen3 QPC into a scratch models
+// directory and checks it against the copy already unpacked. It needs about
+// 52 GB free and, on a slow link, an hour:
+//
+//	NVPAIR_LIVE_QAIC_PULL=1 go test -tags live -run TestLiveQaicPull -v -timeout 7200s
+func TestLiveQaicPull(t *testing.T) {
+	if os.Getenv("NVPAIR_LIVE_QAIC_PULL") == "" {
+		t.Skip("set NVPAIR_LIVE_QAIC_PULL=1 to download the 46 GB Qwen3 QPC")
+	}
+	scratch := os.Getenv("NVPAIR_LIVE_QAIC_PULL_DIR")
+	if scratch == "" {
+		scratch = t.TempDir()
+	}
+	e := NewExecutor(NewRegistry(), NewReporter(nil), nil, t.TempDir())
+	started := time.Now()
+	if _, err := e.pullQPC(context.Background(), "qaic", liveQaicModel, scratch); err != nil {
+		t.Fatalf("pullQPC: %v", err)
+	}
+	t.Logf("pull took %s", time.Since(started).Round(time.Second))
+
+	config := "qpc_16cores_128pl_8192cl_4devices_mxfp6_mxint8"
+	pulled, err := filepath.Glob(filepath.Join(scratch, liveQaicModel, config, "qpc-*", "qpc", "programqpc.bin"))
+	if err != nil || len(pulled) != 1 {
+		t.Fatalf("pulled programqpc.bin = %v, %v", pulled, err)
+	}
+	home, _ := os.UserHomeDir()
+	known, _ := filepath.Glob(filepath.Join(home, ".local/share/nvpair/qaic-models", liveQaicModel, config, "qpc-*", "qpc", "programqpc.bin"))
+	a, errA := os.Stat(pulled[0])
+	if errA != nil {
+		t.Fatal(errA)
+	}
+	if len(known) == 1 {
+		if b, err := os.Stat(known[0]); err == nil && a.Size() != b.Size() {
+			t.Errorf("pulled programqpc.bin is %d bytes, the known copy %d", a.Size(), b.Size())
+		}
+	}
+	args, err := os.ReadFile(filepath.Join(scratch, liveQaicModel, config, "launch.args"))
+	if err != nil || !strings.Contains(string(args), "--device-group 0,1,2,3") {
+		t.Errorf("launch.args = %q, %v", args, err)
+	}
 }
