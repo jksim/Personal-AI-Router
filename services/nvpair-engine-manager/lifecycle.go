@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"nvpair-shared/engines"
 	"nvpair-shared/httpcon"
 )
 
@@ -193,6 +194,11 @@ func (e *Executor) doStart(ctx context.Context, st *engineState, engine string, 
 	}
 	if err := e.qaicGate(engine, rt.Model); err != nil {
 		return err
+	}
+	if engine == engines.NameQaic {
+		if err := refreshQaicLauncher(st.installDir); err != nil {
+			return fmt.Errorf("refresh the Qualcomm launcher: %w", err)
+		}
 	}
 
 	st.mu.Lock()
