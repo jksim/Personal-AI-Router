@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // The Qualcomm engine's pull runs here rather than as a manifest command: the
@@ -25,6 +26,15 @@ import (
 // of gigabytes and there may be no room for both the archive and its contents.
 // It unpacks into <models_dir>/.partial, which neither the launcher nor
 // list_models reads, and moves the QPC into place only after its SHA-256 matches.
+
+// qaicPulls holds the models being pulled now and their partial directories.
+// One pull runs per model, and a partial directory no running pull owns is a
+// leftover from a crash.
+var qaicPulls = struct {
+	mu       sync.Mutex
+	models   map[string]bool
+	partials map[string]bool
+}{models: map[string]bool{}, partials: map[string]bool{}}
 
 // pullQPC pulls a catalog QPC by model id.
 func (e *Executor) pullQPC(ctx context.Context, engine, model, modelsDir string) (json.RawMessage, error) {
@@ -41,7 +51,7 @@ func (e *Executor) pullQPC(ctx context.Context, engine, model, modelsDir string)
 }
 
 func (e *Executor) pullQPCEntry(ctx context.Context, engine string, entry qaicCatalogEntry, modelsDir string) (json.RawMessage, error) {
-	if err := e.qaicGate(engine, entry.Model); err != nil {
+	if err := e.qaicCheck(engine, entry.Model, false); err != nil {
 		return nil, err
 	}
 	done, _ := json.Marshal(map[string]string{"status": "success", "model": entry.Model})
@@ -53,19 +63,37 @@ func (e *Executor) pullQPCEntry(ctx context.Context, engine string, entry qaicCa
 		return nil, err
 	}
 
-	partial := filepath.Join(modelsDir, ".partial", strings.ReplaceAll(entry.Model, "/", "__")+"__"+entry.QPC)
-	if err := os.RemoveAll(partial); err != nil {
+	partialRoot := filepath.Join(modelsDir, ".partial")
+	if err := os.MkdirAll(partialRoot, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(partial, 0o755); err != nil {
+	qaicPulls.mu.Lock()
+	if qaicPulls.models[entry.Model] {
+		qaicPulls.mu.Unlock()
+		return nil, fmt.Errorf("%s is already being pulled", entry.Model)
+	}
+	removeLeftoverPartials(partialRoot)
+	partial, err := os.MkdirTemp(partialRoot, strings.ReplaceAll(entry.Model, "/", "__")+"-")
+	if err != nil {
+		qaicPulls.mu.Unlock()
 		return nil, err
 	}
+	qaicPulls.models[entry.Model] = true
+	qaicPulls.partials[partial] = true
+	qaicPulls.mu.Unlock()
 	kept := false
 	defer func() {
+		qaicPulls.mu.Lock()
+		delete(qaicPulls.models, entry.Model)
+		delete(qaicPulls.partials, partial)
+		qaicPulls.mu.Unlock()
 		if !kept {
 			_ = os.RemoveAll(partial)
 		}
 	}()
+	if free, ok := freeBytes(partialRoot); ok && free < entry.UnpackedSize {
+		return nil, fmt.Errorf("pull %s: it needs %d GB free, and %s has %d GB", entry.Model, entry.UnpackedSize>>30, modelsDir, free>>30)
+	}
 
 	pullCtx, watchdog := newPullProgressWatchdog(ctx, e.pullProgressTimeout)
 	defer watchdog.stop()
@@ -84,13 +112,22 @@ func (e *Executor) pullQPCEntry(ctx context.Context, engine string, entry qaicCa
 
 	hash := sha256.New()
 	counted := &qpcProgress{e: e, engine: engine, model: entry.Model, total: entry.Size, watchdog: watchdog, lastPercent: -1}
-	body := io.TeeReader(io.TeeReader(resp.Body, counted), hash)
-	if err := extractQPC(body, partial); err != nil {
+	// One byte over the catalog size is enough to refuse the file.
+	limited := io.LimitReader(resp.Body, int64(entry.Size)+1)
+	body := io.TeeReader(io.TeeReader(limited, counted), hash)
+	tooLarge := fmt.Errorf("pull %s: the download is larger than the catalog's %d bytes; the file was refused", entry.Model, entry.Size)
+	if err := extractQPC(body, partial, entry.UnpackedSize); err != nil {
+		if counted.done > entry.Size {
+			return nil, tooLarge
+		}
 		return nil, fmt.Errorf("pull %s: %w", entry.Model, watchdog.resolveError(pullCtx, err))
 	}
 	// gzip stops at its trailer; hash whatever follows too.
 	if _, err := io.Copy(io.Discard, body); err != nil {
 		return nil, fmt.Errorf("pull %s: %w", entry.Model, watchdog.resolveError(pullCtx, err))
+	}
+	if counted.done > entry.Size {
+		return nil, tooLarge
 	}
 	if got := hex.EncodeToString(hash.Sum(nil)); got != entry.SHA256 {
 		return nil, fmt.Errorf("pull %s: SHA-256 is %s, want %s; the file was refused", entry.Model, got, entry.SHA256)
@@ -124,15 +161,31 @@ func qpcLaunchArgs(entry qaicCatalogEntry) string {
 		strings.Join(group, ","), entry.Context, entry.Batch, entry.Prefill)
 }
 
+// removeLeftoverPartials deletes partial directories that no running pull
+// owns. The caller holds qaicPulls.mu.
+func removeLeftoverPartials(root string) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		if !qaicPulls.partials[path] {
+			_ = os.RemoveAll(path)
+		}
+	}
+}
+
 // extractQPC unpacks a gzipped tar into dir. It accepts only directories and
-// regular files, all inside dir.
-func extractQPC(r io.Reader, dir string) error {
+// regular files, all inside dir, and no more than limit bytes in all.
+func extractQPC(r io.Reader, dir string, limit uint64) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return err
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
+	var written uint64
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -159,8 +212,12 @@ func extractQPC(r io.Reader, dir string) error {
 			if err != nil {
 				return err
 			}
-			_, copyErr := io.Copy(f, tr)
+			n, copyErr := io.Copy(f, io.LimitReader(tr, int64(limit-written)+1))
+			written += uint64(n)
 			closeErr := f.Close()
+			if copyErr == nil && written > limit {
+				copyErr = fmt.Errorf("the archive unpacks to more than the catalog's %d bytes", limit)
+			}
 			if copyErr != nil {
 				return copyErr
 			}

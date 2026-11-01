@@ -117,6 +117,9 @@ func (e *Executor) PullModelStream(ctx context.Context, engine, model string, pa
 		return nil, err
 	}
 	if engine == engines.NameQaic {
+		if model == "" {
+			model = modelFromParams(params)
+		}
 		return e.pullQPC(ctx, engine, model, st.modelsDir)
 	}
 	act, ok := st.manifest.Actions[pullModelAction]
